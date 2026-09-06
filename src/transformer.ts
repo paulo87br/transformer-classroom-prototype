@@ -1,0 +1,158 @@
+export const STAGES = [
+  'Tokens',
+  'Embeddings',
+  'Posição',
+  'Atenção',
+  'Residual',
+  'Feed-forward',
+  'Logits',
+  'Geração',
+] as const
+
+export type Candidate = { token: string; probability: number }
+
+export type TransformerRun = {
+  prompt: string
+  tokens: string[]
+  embeddings: number[][]
+  positioned: number[][]
+  attention: number[][][]
+  residual: number[][]
+  feedForward: number[][]
+  candidates: Candidate[]
+  selected: string
+  generated: string
+}
+
+const DIMENSION = 12
+const HEADS = 3
+const HEAD_DIMENSION = DIMENSION / HEADS
+const CANDIDATES = ['é', 'pode', 'transforma', 'aprende', 'relaciona', 'gera', 'depende', 'representa']
+
+function hash(text: string) {
+  let value = 2166136261
+  for (let index = 0; index < text.length; index += 1) {
+    value ^= text.charCodeAt(index)
+    value = Math.imul(value, 16777619)
+  }
+  return value >>> 0
+}
+
+function random(seed: number) {
+  let state = seed || 1
+  return () => {
+    state = Math.imul(state ^ (state >>> 15), 1 | state)
+    state ^= state + Math.imul(state ^ (state >>> 7), 61 | state)
+    return ((state ^ (state >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+function tokenVector(token: string) {
+  const next = random(hash(token.toLocaleLowerCase('pt-BR')))
+  return Array.from({ length: DIMENSION }, () => next() * 2 - 1)
+}
+
+function projection(input: number[], size: number, seed: number) {
+  const next = random(seed)
+  return Array.from({ length: size }, () => {
+    let sum = 0
+    for (let index = 0; index < input.length; index += 1) sum += input[index] * (next() * 0.8 - 0.4)
+    return sum
+  })
+}
+
+function softmax(values: number[]) {
+  const max = Math.max(...values)
+  const exp = values.map((value) => Math.exp(value - max))
+  const total = exp.reduce((sum, value) => sum + value, 0) || 1
+  return exp.map((value) => value / total)
+}
+
+function normalize(values: number[]) {
+  const mean = values.reduce((sum, value) => sum + value, 0) / values.length
+  const variance = values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length
+  const deviation = Math.sqrt(variance + 1e-5)
+  return values.map((value) => (value - mean) / deviation)
+}
+
+function tokenize(prompt: string) {
+  const pieces = prompt.trim().match(/[\p{L}\p{N}]+|[^\s\p{L}\p{N}]/gu) || []
+  return ['〈BOS〉', ...pieces.slice(0, 11)]
+}
+
+function keywordBias(prompt: string, candidate: string) {
+  const text = prompt.toLocaleLowerCase('pt-BR')
+  if (/^(o que|como|por que|qual)/.test(text) && candidate === 'é') return 1.2
+  if (/(rede|modelo|máquina|ia)/.test(text) && candidate === 'aprende') return 1.35
+  if (/(transformer|atenção|token)/.test(text) && candidate === 'relaciona') return 1.5
+  if (/(texto|resposta|linguagem)/.test(text) && candidate === 'gera') return 1.25
+  return 0
+}
+
+export function runTinyTransformer(prompt: string): TransformerRun {
+  const tokens = tokenize(prompt)
+  const embeddings = tokens.map(tokenVector)
+  const positioned = embeddings.map((vector, position) => vector.map((value, dimension) => {
+    const frequency = 1 / (10000 ** (2 * Math.floor(dimension / 2) / DIMENSION))
+    const positionSignal = dimension % 2 === 0 ? Math.sin(position * frequency) : Math.cos(position * frequency)
+    return value + positionSignal
+  }))
+
+  const attention: number[][][] = []
+  const mergedContexts = positioned.map(() => [] as number[])
+
+  for (let head = 0; head < HEADS; head += 1) {
+    const queries = positioned.map((vector) => projection(vector, HEAD_DIMENSION, 1103 + head * 97))
+    const keys = positioned.map((vector) => projection(vector, HEAD_DIMENSION, 2203 + head * 101))
+    const values = positioned.map((vector) => projection(vector, HEAD_DIMENSION, 3301 + head * 103))
+    const headAttention: number[][] = []
+
+    for (let queryIndex = 0; queryIndex < tokens.length; queryIndex += 1) {
+      const scores = tokens.map((_, keyIndex) => {
+        if (keyIndex > queryIndex) return -1e9
+        return queries[queryIndex].reduce((sum, value, dimension) => sum + value * keys[keyIndex][dimension], 0) / Math.sqrt(HEAD_DIMENSION)
+      })
+      const weights = softmax(scores)
+      headAttention.push(weights)
+      const context = Array.from({ length: HEAD_DIMENSION }, (_, dimension) => (
+        weights.reduce((sum, weight, keyIndex) => sum + weight * values[keyIndex][dimension], 0)
+      ))
+      mergedContexts[queryIndex].push(...context)
+    }
+    attention.push(headAttention)
+  }
+
+  const residual = positioned.map((vector, tokenIndex) => normalize(
+    vector.map((value, dimension) => value + mergedContexts[tokenIndex][dimension]),
+  ))
+
+  const feedForward = residual.map((vector, tokenIndex) => {
+    const expanded = projection(vector, DIMENSION * 2, 4409 + tokenIndex).map((value) => Math.max(0, value))
+    const compressed = projection(expanded, DIMENSION, 5501 + tokenIndex)
+    return normalize(vector.map((value, dimension) => value + compressed[dimension]))
+  })
+
+  const last = feedForward.at(-1) || Array(DIMENSION).fill(0)
+  const logits = CANDIDATES.map((candidate) => {
+    const outputVector = tokenVector(`saída:${candidate}`)
+    const score = last.reduce((sum, value, index) => sum + value * outputVector[index], 0) / Math.sqrt(DIMENSION)
+    return score + keywordBias(prompt, candidate)
+  })
+  const probabilities = softmax(logits)
+  const candidates = CANDIDATES.map((token, index) => ({ token, probability: probabilities[index] }))
+    .sort((a, b) => b.probability - a.probability)
+  const selected = candidates[0].token
+
+  return {
+    prompt,
+    tokens,
+    embeddings,
+    positioned,
+    attention,
+    residual,
+    feedForward,
+    candidates,
+    selected,
+    generated: `${prompt.trim()} ${selected}…`,
+  }
+}
