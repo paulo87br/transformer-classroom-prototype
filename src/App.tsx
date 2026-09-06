@@ -76,9 +76,12 @@ function AuthGate({ children }: { children: ReactNode }) {
         }
       }, 0)
     })
-    void client.auth.getSession().then(({ data }) => {
+    void client.auth.getSession().then(({ data, error }) => {
       if (!active) return
-      if (data.session) void authorize(data.session)
+      if (error) {
+        setMessage('Não foi possível restaurar sua sessão. Tente novamente.')
+        setState('error')
+      } else if (data.session) void authorize(data.session)
       else setState('anonymous')
     })
     return () => {
@@ -105,7 +108,24 @@ function AuthGate({ children }: { children: ReactNode }) {
     if (!client) return
     await client.auth.signOut()
     authorizedId.current = null
+    pendingId.current = null
+    setPassword('')
+    setMessage('')
     setState('anonymous')
+  }
+
+  const retryAuthorization = async () => {
+    if (!client) return
+    setMessage('')
+    setState('checking')
+    const { data, error } = await client.auth.getSession()
+    if (error || !data.session) {
+      authorizedId.current = null
+      pendingId.current = null
+      setState('anonymous')
+      return
+    }
+    await authorize(data.session)
   }
 
   if (state === 'authenticated') return <>{children}<button className="signout" onClick={() => void signOut()}><LogOut size={15} /> Sair</button></>
@@ -119,8 +139,15 @@ function AuthGate({ children }: { children: ReactNode }) {
         <h1>{title}</h1>
         {state === 'booting' || state === 'checking' ? <div className="loading"><i /> Restaurando seu acesso…</div>
           : state === 'configuration' ? <p className="form-error">Configure o Supabase para iniciar o laboratório.</p>
-          : state === 'unauthorized' ? <p className="form-error"><strong>{message}</strong> não pertence à lista de administradores.</p>
-          : state === 'error' ? <button className="button secondary" onClick={() => window.location.reload()}>Tentar novamente</button>
+          : state === 'unauthorized' ? <div className="auth-form">
+              <p className="form-error"><strong>{message}</strong> não pertence à lista de administradores.</p>
+              <button className="button secondary" type="button" onClick={() => void signOut()}><LogOut size={18} /> Usar outra conta</button>
+            </div>
+          : state === 'error' ? <div className="auth-form">
+              <p className="form-error">{message}</p>
+              <button className="button secondary" type="button" onClick={() => void retryAuthorization()}><RotateCcw size={18} /> Tentar novamente</button>
+              <button className="button secondary" type="button" onClick={() => void signOut()}><LogOut size={18} /> Sair</button>
+            </div>
           : <form className="auth-form" onSubmit={(event) => void signIn(event)}>
               <label>E-mail<input type="email" autoComplete="username" required value={email} onChange={(event) => setEmail(event.target.value)} /></label>
               <label>Senha<input type="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} /></label>
