@@ -5,7 +5,9 @@ import {
   Moon, Play, Radio, RotateCcw, Send, Sun,
 } from 'lucide-react'
 import { getSupabaseClient, sanitizeRoom, TransformerBus, type ConnectionState } from './supabase'
-import { runTinyTransformer, STAGES, type TransformerRun } from './transformer'
+import {
+  generateTransformerSequence, STAGES, type GenerationOptions, type TransformerRun,
+} from './transformer'
 
 function Brand({ compact = false }: { compact?: boolean }) {
   return (
@@ -180,18 +182,30 @@ function Heatmap({ data, labels }: { data: number[][]; labels: string[] }) {
 }
 
 function Attention({ run }: { run: TransformerRun }) {
+  const [head, setHead] = useState(0)
+  const matrix = run.attention[head] || []
+  const focus = (matrix.at(-1) || []).map((weight, index) => ({ token: run.tokens[index], weight, index }))
+    .sort((a, b) => b.weight - a.weight)
   return (
-    <div className="attention-heads">
-      {run.attention.map((matrix, head) => (
-        <article key={head}>
-          <span>Cabeça {head + 1}</span>
+    <div className="attention-explorer">
+      <div className="head-tabs" role="tablist" aria-label="Cabeças de atenção">
+        {run.attention.map((_, index) => <button key={index} className={index === head ? 'active' : ''} onClick={() => setHead(index)}>Cabeça {index + 1}</button>)}
+      </div>
+      <div className="attention-layout">
+        <article className="attention-matrix">
+          <span>Matriz causal</span>
           <div className="attention-grid" style={{ gridTemplateColumns: `repeat(${run.tokens.length}, 1fr)` }}>
             {matrix.flatMap((row, rowIndex) => row.map((weight, columnIndex) => (
-              <i key={`${rowIndex}-${columnIndex}`} title={`${run.tokens[rowIndex]} → ${run.tokens[columnIndex]}: ${Math.round(weight * 100)}%`} style={{ opacity: weight <= 0 ? 0.035 : 0.16 + weight * 0.84 }} />
+              <i key={`${rowIndex}-${columnIndex}`} title={`${run.tokens[rowIndex]} → ${run.tokens[columnIndex]}: ${Math.round(weight * 100)}%`} style={{ opacity: weight <= 0 ? 0.035 : 0.14 + weight * 0.86 }} />
             )))}
           </div>
         </article>
-      ))}
+        <article className="attention-focus">
+          <span>O último token consulta</span>
+          <strong>{run.tokens.at(-1)}</strong>
+          <div>{focus.map(({ token, weight, index }) => <div key={`${token}-${index}`}><small>{token}</small><i><b style={{ width: `${weight * 100}%` }} /></i><em>{Math.round(weight * 100)}%</em></div>)}</div>
+        </article>
+      </div>
     </div>
   )
 }
@@ -214,7 +228,7 @@ function StageVisual({ run, stage }: { run: TransformerRun; stage: number }) {
   if (stage === 3) return <Attention run={run} />
   if (stage === 4) return <Heatmap data={run.residual} labels={run.tokens} />
   if (stage === 5) return <Heatmap data={run.feedForward} labels={run.tokens} />
-  if (stage === 6) return <div className="logits">{run.candidates.map((candidate) => <div key={candidate.token}><span>{candidate.token}</span><i><b style={{ width: `${candidate.probability * 100}%` }} /></i><strong>{Math.round(candidate.probability * 100)}%</strong></div>)}</div>
+  if (stage === 6) return <div className="logits">{run.candidates.slice(0, 8).map((candidate) => <div key={candidate.token} className={candidate.token === run.selected ? 'selected' : ''}><span>{candidate.token}</span><i><b style={{ width: `${candidate.probability * 100}%` }} /></i><strong>{Math.round(candidate.probability * 100)}%</strong></div>)}</div>
   return <div className="generation"><span>Próximo token</span><strong>{run.selected}</strong><p>{run.generated}</p></div>
 }
 
@@ -237,6 +251,8 @@ function InputPage({ room }: { room: string }) {
   const bus = useRef<TransformerBus | null>(null)
   const [connection, setConnection] = useState<ConnectionState>('connecting')
   const [prompt, setPrompt] = useState('Como uma inteligência artificial aprende linguagem?')
+  const [temperature, setTemperature] = useState(.7)
+  const [maxTokens, setMaxTokens] = useState(3)
   const [sent, setSent] = useState(false)
   useEffect(() => {
     bus.current = new TransformerBus(room, 'tablet')
@@ -246,7 +262,7 @@ function InputPage({ room }: { room: string }) {
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     if (!prompt.trim()) return
-    await bus.current?.send('run', { prompt: prompt.trim() })
+    await bus.current?.send('run', { prompt: prompt.trim(), temperature, maxTokens })
     setSent(true)
   }
   const clear = async () => {
@@ -262,6 +278,10 @@ function InputPage({ room }: { room: string }) {
       <form onSubmit={(event) => void submit(event)}>
         <textarea maxLength={180} value={prompt} onChange={(event) => { setPrompt(event.target.value); setSent(false) }} placeholder="Digite uma pergunta…" />
         <small>{prompt.length}/180 caracteres</small>
+        <div className="generation-settings">
+          <label><span>Temperatura <strong>{temperature.toFixed(1)}</strong></span><input type="range" min="0.2" max="1.4" step="0.1" value={temperature} onChange={(event) => { setTemperature(Number(event.target.value)); setSent(false) }} /><small>Precisa</small><small>Criativa</small></label>
+          <fieldset><legend>Tokens gerados</legend>{[1, 3, 5].map((value) => <button key={value} type="button" className={maxTokens === value ? 'active' : ''} onClick={() => { setMaxTokens(value); setSent(false) }}>{value}</button>)}</fieldset>
+        </div>
         <div className="input-actions">
           <button type="button" className="button secondary" onClick={() => void clear()}><Eraser size={18} /> Limpar</button>
           <button className="button primary" type="submit" disabled={!prompt.trim()}><Play size={18} /> Processar</button>
@@ -276,46 +296,66 @@ function DisplayPage({ room }: { room: string }) {
   const timer = useRef<number | null>(null)
   const bus = useRef<TransformerBus | null>(null)
   const [connection, setConnection] = useState<ConnectionState>('connecting')
-  const [run, setRun] = useState<TransformerRun | null>(null)
+  const [runs, setRuns] = useState<TransformerRun[]>([])
+  const [cycle, setCycle] = useState(0)
   const [stage, setStage] = useState(0)
   const [theme, setTheme] = useState<'dark' | 'light'>(() => localStorage.getItem('transformer-theme') === 'light' ? 'light' : 'dark')
   const stop = useCallback(() => { if (timer.current) window.clearInterval(timer.current); timer.current = null }, [])
-  const processPrompt = useCallback((prompt: string) => {
+  const processPrompt = useCallback((prompt: string, options: GenerationOptions = { temperature: .7, maxTokens: 3 }) => {
     stop()
-    const next = runTinyTransformer(prompt)
-    setRun(next)
+    const next = generateTransformerSequence(prompt, options)
+    setRuns(next)
+    setCycle(0)
     setStage(0)
-    let value = 0
+    let stageValue = 0
+    let cycleValue = 0
     timer.current = window.setInterval(() => {
-      value += 1
-      setStage(value)
-      if (value >= STAGES.length - 1) stop()
-    }, 1050)
+      if (stageValue < STAGES.length - 1) {
+        stageValue += 1
+        setStage(stageValue)
+      } else if (cycleValue < next.length - 1) {
+        cycleValue += 1
+        stageValue = 0
+        setCycle(cycleValue)
+        setStage(0)
+      } else stop()
+    }, 950)
   }, [stop])
   useEffect(() => {
     bus.current = new TransformerBus(room, 'projector')
-    bus.current.on('run', ({ prompt }) => { if (typeof prompt === 'string') processPrompt(prompt) })
-    bus.current.on('clear', () => { stop(); setRun(null); setStage(0) })
+    bus.current.on('run', ({ prompt, temperature, maxTokens }) => {
+      if (typeof prompt !== 'string') return
+      processPrompt(prompt, {
+        temperature: typeof temperature === 'number' ? temperature : .7,
+        maxTokens: typeof maxTokens === 'number' ? maxTokens : 3,
+      })
+    })
+    bus.current.on('clear', () => { stop(); setRuns([]); setCycle(0); setStage(0) })
     bus.current.connect(setConnection)
     return () => { stop(); bus.current?.disconnect() }
   }, [processPrompt, room, stop])
   useEffect(() => { localStorage.setItem('transformer-theme', theme) }, [theme])
-  const sample = useMemo(() => run || runTinyTransformer('Como um Transformer entende contexto?'), [run])
+  const sampleRuns = useMemo(() => runs.length ? runs : generateTransformerSequence('Como um Transformer entende contexto?', { temperature: .7, maxTokens: 3 }), [runs])
+  const sample = sampleRuns[Math.min(cycle, sampleRuns.length - 1)]
   const selectStage = (index: number) => { stop(); setStage(Math.max(0, Math.min(STAGES.length - 1, index))) }
+  const selectCycle = (index: number) => { stop(); setCycle(Math.max(0, Math.min(sampleRuns.length - 1, index))); setStage(0) }
+  const previous = () => { stop(); if (stage > 0) setStage(stage - 1); else if (cycle > 0) { setCycle(cycle - 1); setStage(STAGES.length - 1) } }
+  const next = () => { stop(); if (stage < STAGES.length - 1) setStage(stage + 1); else if (cycle < sampleRuns.length - 1) { setCycle(cycle + 1); setStage(0) } }
   return (
     <main className={`display-page ${theme}`}>
       <header className="display-header">
         <div><Brand compact /><span className="eyebrow">Transformer generativo · Sala {room}</span><h1>Como uma máquina constrói uma resposta?</h1></div>
         <div className="header-actions"><Connection state={connection} /><button className="icon-button" onClick={() => setTheme((value) => value === 'dark' ? 'light' : 'dark')} aria-label="Alternar tema">{theme === 'dark' ? <Sun /> : <Moon />}</button><button className="icon-button" onClick={() => void document.documentElement.requestFullscreen()} aria-label="Tela cheia"><Maximize /></button></div>
       </header>
-      <section className="prompt-card"><span>Prompt do aluno</span><p>{sample.prompt}</p>{!run && <small>Demonstração local — aguardando o tablet</small>}</section>
+      <section className="prompt-card"><span>Prompt do aluno</span><p>{sample.prompt}</p><small>Temperatura {sample.temperature.toFixed(1)} · {sampleRuns.length} token{sampleRuns.length > 1 ? 's' : ''}</small>{!runs.length && <small>Demonstração local — aguardando o tablet</small>}</section>
       <section className="stage-panel">
+        <div className="cycle-bar"><span>Ciclos de geração</span>{sampleRuns.map((item, index) => <button key={index} className={`${index < cycle ? 'done' : ''} ${index === cycle ? 'active' : ''}`} onClick={() => selectCycle(index)}><small>{index + 1}</small><strong>{item.selected}</strong></button>)}</div>
         <div className="stage-heading"><span>0{stage + 1}</span><div><small>{STAGES[stage]}</small><p>{stageDescriptions[stage]}</p></div></div>
         <StageVisual run={sample} stage={stage} />
       </section>
       <footer className="timeline">
         <div className="steps">{STAGES.map((label, index) => <button key={label} className={`${index < stage ? 'reached' : ''} ${index === stage ? 'current' : ''}`} onClick={() => selectStage(index)}><span>{index + 1}</span><b>{label}</b></button>)}</div>
-        <div className="nav"><button onClick={() => selectStage(stage - 1)} disabled={stage === 0}><ChevronLeft /></button><button onClick={() => selectStage(stage + 1)} disabled={stage === STAGES.length - 1}><ChevronRight /></button><button onClick={() => processPrompt(sample.prompt)}><RotateCcw size={17} /> Repetir</button></div>
+        <div className="nav"><button onClick={previous} disabled={stage === 0 && cycle === 0}><ChevronLeft /></button><button onClick={next} disabled={stage === STAGES.length - 1 && cycle === sampleRuns.length - 1}><ChevronRight /></button><button onClick={() => processPrompt(sample.prompt, { temperature: sample.temperature, maxTokens: sampleRuns.length })}><RotateCcw size={17} /> Repetir</button></div>
       </footer>
     </main>
   )

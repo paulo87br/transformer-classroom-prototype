@@ -10,9 +10,13 @@ export const STAGES = [
 ] as const
 
 export type Candidate = { token: string; probability: number }
+export type GenerationOptions = { temperature: number; maxTokens: number }
 
 export type TransformerRun = {
   prompt: string
+  context: string
+  cycle: number
+  temperature: number
   tokens: string[]
   embeddings: number[][]
   positioned: number[][]
@@ -27,7 +31,10 @@ export type TransformerRun = {
 const DIMENSION = 12
 const HEADS = 3
 const HEAD_DIMENSION = DIMENSION / HEADS
-const CANDIDATES = ['é', 'pode', 'transforma', 'aprende', 'relaciona', 'gera', 'depende', 'representa']
+const CANDIDATES = [
+  'é', 'porque', 'quando', 'um', 'uma', 'modelo', 'rede', 'atenção', 'tokens', 'contexto',
+  'aprende', 'relaciona', 'transforma', 'gera', 'resposta', 'informação', 'de', 'com', 'e', '.',
+]
 
 function hash(text: string) {
   let value = 2166136261
@@ -75,22 +82,48 @@ function normalize(values: number[]) {
   return values.map((value) => (value - mean) / deviation)
 }
 
-function tokenize(prompt: string) {
-  const pieces = prompt.trim().match(/[\p{L}\p{N}]+|[^\s\p{L}\p{N}]/gu) || []
-  return ['〈BOS〉', ...pieces.slice(0, 11)]
+function tokenize(context: string) {
+  const pieces = context.trim().match(/[\p{L}\p{N}]+|[^\s\p{L}\p{N}]/gu) || []
+  return ['〈BOS〉', ...pieces.slice(-11)]
 }
 
-function keywordBias(prompt: string, candidate: string) {
-  const text = prompt.toLocaleLowerCase('pt-BR')
-  if (/^(o que|como|por que|qual)/.test(text) && candidate === 'é') return 1.2
-  if (/(rede|modelo|máquina|ia)/.test(text) && candidate === 'aprende') return 1.35
-  if (/(transformer|atenção|token)/.test(text) && candidate === 'relaciona') return 1.5
-  if (/(texto|resposta|linguagem)/.test(text) && candidate === 'gera') return 1.25
-  return 0
+function keywordBias(context: string, candidate: string) {
+  const text = context.toLocaleLowerCase('pt-BR')
+  const last = tokenize(context).at(-1) || ''
+  let bias = 0
+  if (/^(o que|como|por que|qual)/.test(text) && candidate === 'é') bias += 1.2
+  if (/(rede|modelo|máquina|ia)/.test(text) && candidate === 'aprende') bias += 1.35
+  if (/(transformer|atenção|token)/.test(text) && candidate === 'relaciona') bias += 1.5
+  if (/(texto|resposta|linguagem)/.test(text) && candidate === 'gera') bias += 1.25
+  if (/^(é|porque|quando|com|de|e)$/.test(last) && /^(um|uma|modelo|rede|atenção|tokens|contexto|informação)$/.test(candidate)) bias += 1.15
+  if (/^(modelo|rede|atenção|tokens|contexto|informação)$/.test(last) && /^(aprende|relaciona|transforma|gera|é)$/.test(candidate)) bias += 1.05
+  if (/^(aprende|relaciona|transforma|gera)$/.test(last) && /^(contexto|tokens|informação|resposta)$/.test(candidate)) bias += 1.1
+  if (last === '.' && candidate === 'quando') bias += 1
+  return bias
 }
 
-export function runTinyTransformer(prompt: string): TransformerRun {
-  const tokens = tokenize(prompt)
+function appendToken(context: string, token: string) {
+  return token === '.' ? `${context.trim()}.` : `${context.trim()} ${token}`
+}
+
+function selectCandidate(candidates: Candidate[], seed: number) {
+  const value = random(seed)()
+  let cumulative = 0
+  for (const candidate of candidates) {
+    cumulative += candidate.probability
+    if (value <= cumulative) return candidate.token
+  }
+  return candidates.at(-1)?.token || ''
+}
+
+export function runTinyTransformer(
+  context: string,
+  options: Partial<GenerationOptions> & { cycle?: number; originalPrompt?: string } = {},
+): TransformerRun {
+  const temperature = Math.max(0.2, Math.min(1.4, options.temperature ?? 0.7))
+  const cycle = Math.max(0, options.cycle ?? 0)
+  const prompt = options.originalPrompt || context
+  const tokens = tokenize(context)
   const embeddings = tokens.map(tokenVector)
   const positioned = embeddings.map((vector, position) => vector.map((value, dimension) => {
     const frequency = 1 / (10000 ** (2 * Math.floor(dimension / 2) / DIMENSION))
@@ -114,10 +147,10 @@ export function runTinyTransformer(prompt: string): TransformerRun {
       })
       const weights = softmax(scores)
       headAttention.push(weights)
-      const context = Array.from({ length: HEAD_DIMENSION }, (_, dimension) => (
+      const headContext = Array.from({ length: HEAD_DIMENSION }, (_, dimension) => (
         weights.reduce((sum, weight, keyIndex) => sum + weight * values[keyIndex][dimension], 0)
       ))
-      mergedContexts[queryIndex].push(...context)
+      mergedContexts[queryIndex].push(...headContext)
     }
     attention.push(headAttention)
   }
@@ -136,15 +169,18 @@ export function runTinyTransformer(prompt: string): TransformerRun {
   const logits = CANDIDATES.map((candidate) => {
     const outputVector = tokenVector(`saída:${candidate}`)
     const score = last.reduce((sum, value, index) => sum + value * outputVector[index], 0) / Math.sqrt(DIMENSION)
-    return score + keywordBias(prompt, candidate)
+    return (score + keywordBias(context, candidate)) / temperature
   })
   const probabilities = softmax(logits)
   const candidates = CANDIDATES.map((token, index) => ({ token, probability: probabilities[index] }))
     .sort((a, b) => b.probability - a.probability)
-  const selected = candidates[0].token
+  const selected = selectCandidate(candidates, hash(`${context}|${cycle}|${temperature}`))
 
   return {
     prompt,
+    context,
+    cycle,
+    temperature,
     tokens,
     embeddings,
     positioned,
@@ -153,6 +189,18 @@ export function runTinyTransformer(prompt: string): TransformerRun {
     feedForward,
     candidates,
     selected,
-    generated: `${prompt.trim()} ${selected}…`,
+    generated: appendToken(context, selected),
   }
+}
+
+export function generateTransformerSequence(prompt: string, options: GenerationOptions) {
+  const runs: TransformerRun[] = []
+  let context = prompt.trim()
+  const maxTokens = Math.max(1, Math.min(5, Math.round(options.maxTokens)))
+  for (let cycle = 0; cycle < maxTokens; cycle += 1) {
+    const run = runTinyTransformer(context, { ...options, cycle, originalPrompt: prompt.trim() })
+    runs.push(run)
+    context = run.generated
+  }
+  return runs
 }
