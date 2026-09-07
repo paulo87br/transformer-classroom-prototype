@@ -162,6 +162,22 @@ h1, h2 { font-family: 'Fraunces', Georgia, serif; font-weight: 300; }
   .result-modal { padding: .8rem; }
 }
 
+.tablet-link { min-height: 36px; border: 1px solid var(--line); border-radius: 9px; padding: 0 .75rem; display: inline-flex; align-items: center; gap: .4rem; color: var(--gold); background: var(--panel); font-size: .66rem; font-weight: 600; text-decoration: none; white-space: nowrap; }
+.display-page.light { --gold: #925f00; --gold-soft: #6f4900; --line: #aaa397; --muted: #454d59; }
+.display-page.light .connection { color: #303742; background: rgba(255,255,255,.88); }
+.display-page.light .connection.connected i { background: var(--gold); box-shadow: 0 0 8px rgba(146,95,0,.42); }
+.display-page.light .token-list button.active,
+.display-page.light .stage-progress-top .steps button.current span,
+.display-page.light .output-token-list button.active,
+.display-page.light .timeline > .nav .reveal-button { color: #fff; }
+.display-page.light .legal-example,
+.display-page.light .calculation-desk,
+.display-page.light .probability-inspector { border-color: #aaa397; }
+
+@media (max-width: 900px) {
+  .tablet-link { width: 40px; padding: 0; justify-content: center; font-size: 0; }
+}
+
 /* Percurso didático: o mesmo token permanece visível em todas as camadas. */
 .input-count { margin: .55rem .2rem 1.1rem; display: flex; justify-content: space-between; gap: 1rem; color: var(--muted); }
 .input-count small:first-child { color: var(--gold-soft); }

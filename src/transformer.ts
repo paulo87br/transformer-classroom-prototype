@@ -41,9 +41,13 @@ const HEADS = 3
 const HEAD_DIMENSION = DIMENSION / HEADS
 const MAX_TOKEN_ID = 200_000
 const CANDIDATES = [
-  'é', 'porque', 'quando', 'um', 'uma', 'modelo', 'rede', 'atenção', 'tokens', 'contexto',
-  'aprende', 'relaciona', 'transforma', 'gera', 'resposta', 'informação', 'de', 'com', 'e', '.',
+  'A', 'O', 'é', 'porque', 'quando', 'o', 'os', 'um', 'uma', 'modelo', 'rede', 'atenção', 'tokens', 'texto', 'contexto',
+  'aprende', 'relaciona', 'transforma', 'gera', 'constrói', 'resposta', 'informação', 'decisão', 'anterior', 'precedente',
+  'orienta', 'novo', 'caso', 'contextos', 'são', 'semelhantes', 'de', 'com', 'e', '.',
 ]
+
+const LEGAL_EXAMPLE = ['O', 'precedente', 'orienta', 'o', 'novo', 'caso', 'quando', 'os', 'contextos', 'são', 'semelhantes', '.']
+const GENERAL_EXAMPLE = ['O', 'modelo', 'relaciona', 'o', 'texto', 'e', 'constrói', 'uma', 'resposta', 'com', 'contexto', '.']
 
 function fixedWeight(layer: number, input: number, output: number) {
   return Math.sin((layer + 1) * (input + 1) * (output + 1) * .73) * .58
@@ -120,6 +124,11 @@ function keywordBias(context: string, candidate: string) {
   return bias
 }
 
+function guidedTarget(prompt: string, cycle: number) {
+  const sequence = /(decisão|juríd|caso|precedente)/i.test(prompt) ? LEGAL_EXAMPLE : GENERAL_EXAMPLE
+  return sequence[cycle % sequence.length]
+}
+
 function appendToken(context: string, token: string) {
   return token === '.' ? `${context.trim()}.` : `${context.trim()} ${token}`
 }
@@ -175,7 +184,8 @@ export function runTinyTransformer(context: string, options: Partial<GenerationO
     const candidateFeatures = tokenFeatures(candidateIds[candidateIndex], candidate, candidateIndex, CANDIDATES.length)
     const outputVector = project(candidateFeatures, DIMENSION, 0, true)
     const score = last.reduce((sum, value, index) => sum + value * outputVector[index], 0) / Math.sqrt(DIMENSION)
-    return (score + keywordBias(context, candidate)) / temperature
+    const guidedBias = candidate === guidedTarget(prompt, cycle) ? 3.2 : 0
+    return (score + keywordBias(context, candidate) + guidedBias) / temperature
   })
   const probabilities = softmax(logits)
   const candidates = CANDIDATES.map((token, index) => ({ token, tokenId: candidateIds[index], logit: logits[index], probability: probabilities[index] }))

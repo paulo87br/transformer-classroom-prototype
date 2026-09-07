@@ -248,7 +248,7 @@ function InputPage({ room }: { room: string }) {
   const [connection, setConnection] = useState<ConnectionState>('connecting')
   const [prompt, setPrompt] = useState('Como uma inteligência artificial aprende linguagem?')
   const [temperature, setTemperature] = useState(.7)
-  const [maxTokens, setMaxTokens] = useState(8)
+  const [maxTokens, setMaxTokens] = useState(12)
   const [sent, setSent] = useState(false)
   const promptTokens = useMemo(() => tokenizeForClassroom(prompt), [prompt])
   useEffect(() => {
@@ -313,7 +313,7 @@ function DisplayPage({ room }: { room: string }) {
     setIsPlaying(false)
   }, [])
 
-  const preparePrompt = useCallback((prompt: string, options: GenerationOptions = { temperature: .7, maxTokens: 8 }, demo = false) => {
+  const preparePrompt = useCallback((prompt: string, options: GenerationOptions = { temperature: .7, maxTokens: 12 }, demo = false) => {
     stop()
     setRuns(generateTransformerSequence(prompt, options))
     setIsDemo(demo)
@@ -350,7 +350,7 @@ function DisplayPage({ room }: { room: string }) {
   }, [stop])
 
   useEffect(() => {
-    preparePrompt('Como uma decisão anterior influencia um novo caso?', { temperature: .7, maxTokens: 8 }, true)
+    preparePrompt('Como uma decisão anterior influencia um novo caso?', { temperature: .7, maxTokens: 12 }, true)
     return stop
   }, [preparePrompt, stop])
 
@@ -360,16 +360,16 @@ function DisplayPage({ room }: { room: string }) {
       if (typeof prompt !== 'string') return
       preparePrompt(prompt, {
         temperature: typeof temperature === 'number' ? temperature : .7,
-        maxTokens: typeof maxTokens === 'number' ? Math.max(8, maxTokens) : 8,
+        maxTokens: typeof maxTokens === 'number' ? Math.max(12, maxTokens) : 12,
       }, false)
     })
-    bus.current.on('clear', () => preparePrompt('Como uma decisão anterior influencia um novo caso?', { temperature: .7, maxTokens: 8 }, true))
+    bus.current.on('clear', () => preparePrompt('Como uma decisão anterior influencia um novo caso?', { temperature: .7, maxTokens: 12 }, true))
     bus.current.connect(setConnection)
     return () => { stop(); bus.current?.disconnect() }
   }, [preparePrompt, room, stop])
 
   useEffect(() => { localStorage.setItem('transformer-theme', theme) }, [theme])
-  const sampleRuns = useMemo(() => runs.length ? runs : generateTransformerSequence('Como um Transformer entende contexto?', { temperature: .7, maxTokens: 8 }), [runs])
+  const sampleRuns = useMemo(() => runs.length ? runs : generateTransformerSequence('Como um Transformer entende contexto?', { temperature: .7, maxTokens: 12 }), [runs])
   const sample = sampleRuns[0]
   const story = STAGE_STORIES[stage]
   const activeTokenIndex = Math.max(0, Math.min(focusToken ?? sample.tokens.length - 1, sample.tokens.length - 1))
@@ -399,7 +399,7 @@ function DisplayPage({ room }: { room: string }) {
       text: run.selected,
       logprob: Math.log(chosen?.probability || 1e-9),
       probability: chosen?.probability || 0,
-      alternatives: run.candidates.slice(0, 5).map((candidate) => ({ text: candidate.token, logprob: Math.log(candidate.probability || 1e-9), probability: candidate.probability })),
+      alternatives: run.candidates.filter((candidate) => candidate.token !== run.selected).slice(0, 5).map((candidate) => ({ text: candidate.token, logprob: Math.log(candidate.probability || 1e-9), probability: candidate.probability })),
     }
   }), [sampleRuns, trace])
   const finalText = trace?.finalText || outputTokens.map((token, index) => token.text === '.' ? '.' : `${index ? ' ' : ''}${token.text}`).join('')
@@ -423,7 +423,7 @@ function DisplayPage({ room }: { room: string }) {
       <TransformerScene run={sample} activeStage={stage} selectedTokenIndex={activeTokenIndex} theme={theme} resetId={viewResetId} onSelectStage={selectStage} />
       <header className="display-header">
         <div><Brand compact /><span className="eyebrow">Transformer generativo · Sala {room}</span><h1>Como uma máquina constrói uma resposta?</h1></div>
-        <div className="header-actions"><Connection state={connection} /><button className="icon-button" disabled={awaitingChoice} onClick={() => isPlaying ? stop() : startJourney(stage)} aria-label={isPlaying ? 'Pausar animação' : 'Reproduzir animação'}>{isPlaying ? <Pause /> : <Play />}</button><button className="icon-button" onClick={() => setTheme((value) => value === 'dark' ? 'light' : 'dark')} aria-label="Alternar tema">{theme === 'dark' ? <Sun /> : <Moon />}</button><button className="icon-button" onClick={() => setViewResetId((value) => value + 1)} aria-label="Restaurar câmera"><RotateCcw /></button><button className="icon-button" onClick={() => void document.documentElement.requestFullscreen()} aria-label="Tela cheia"><Maximize /></button></div>
+        <div className="header-actions"><a className="tablet-link" href={`/input?room=${room}`} target="_blank" rel="noreferrer"><Send size={15} /> Tela do aluno</a><Connection state={connection} /><button className="icon-button" disabled={awaitingChoice} onClick={() => isPlaying ? stop() : startJourney(stage)} aria-label={isPlaying ? 'Pausar animação' : 'Reproduzir animação'}>{isPlaying ? <Pause /> : <Play />}</button><button className="icon-button" onClick={() => setTheme((value) => value === 'dark' ? 'light' : 'dark')} aria-label="Alternar tema">{theme === 'dark' ? <Sun /> : <Moon />}</button><button className="icon-button" onClick={() => setViewResetId((value) => value + 1)} aria-label="Restaurar câmera"><RotateCcw /></button><button className="icon-button" onClick={() => void document.documentElement.requestFullscreen()} aria-label="Tela cheia"><Maximize /></button></div>
       </header>
 
       <section className="token-column" aria-label="Tokens reais do texto">
