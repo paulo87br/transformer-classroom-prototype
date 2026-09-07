@@ -84,3 +84,56 @@ h1, h2 { font-family: 'Fraunces', Georgia, serif; font-weight: 300; }
   .display-header { padding: 1rem; }.display-header h1 { font-size: 1.65rem; }.display-header .brand span, .display-header .connection, .header-actions .icon-button:nth-of-type(3) { display: none; }.prompt-card { display: none; }.explanation-panel { left: 1rem; right: 1rem; top: auto; bottom: 19%; width: auto; max-height: 42%; padding: 1rem; border: 1px solid var(--line); border-radius: 12px; background: color-mix(in srgb, var(--page-bg) 86%, transparent); }.explanation-panel h2 { font-size: 1.6rem; }.explanation-panel > p { font-size: .8rem; }.legal-example { display: none; }.cycle-bar { left: 1rem; right: 1rem; bottom: 5.6rem; }.cycle-bar > span { display: none; }
   .stage-heading p { font-size: .78rem; }.attention-layout { grid-template-columns: 1fr; }.attention-matrix { display: none !important; }.cycle-bar > span { display: none; }.cycle-bar button { min-width: 48px; }.timeline { left: 1rem; right: 1rem; }.steps { grid-template-columns: repeat(8,1fr); }.steps button { display: block; }.steps button::after { display: none; }.steps button span { width: 24px; height: 24px; }.nav button:last-child { display: none; }
 }
+
+/* Percurso didático: o mesmo token permanece visível em todas as camadas. */
+.input-count { margin: .55rem .2rem 1.1rem; display: flex; justify-content: space-between; gap: 1rem; color: var(--muted); }
+.input-count small:first-child { color: var(--gold-soft); }
+.token-ribbon { position: absolute; z-index: 4; left: 22%; right: 26%; top: 19%; padding: .65rem .75rem; border: 1px solid color-mix(in srgb, var(--gold) 28%, var(--line)); border-radius: 12px; background: color-mix(in srgb, var(--panel) 90%, transparent); backdrop-filter: blur(12px); }
+.token-ribbon-heading { margin-bottom: .45rem; display: flex; justify-content: space-between; gap: 1rem; align-items: center; }
+.token-ribbon-heading span { color: var(--gold); font: 600 .59rem 'JetBrains Mono', monospace; letter-spacing: .1em; text-transform: uppercase; }
+.token-ribbon-heading small { overflow: hidden; color: var(--muted); font: 500 .54rem 'JetBrains Mono', monospace; text-overflow: ellipsis; white-space: nowrap; }
+.token-ribbon > div:last-child { display: flex; gap: .35rem; overflow-x: auto; padding: .12rem 0 .25rem; scrollbar-width: thin; }
+.token-ribbon button { min-width: 48px; height: 38px; border: 1px solid var(--line); border-radius: 8px; padding: .25rem .45rem; display: grid; place-items: center; color: var(--bone); background: var(--panel); cursor: pointer; }
+.token-ribbon button span { max-width: 7rem; overflow: hidden; font: 600 .68rem 'JetBrains Mono', monospace; text-overflow: ellipsis; white-space: nowrap; }
+.token-ribbon button small { color: var(--muted); font: 500 .48rem 'JetBrains Mono', monospace; }
+.token-ribbon button.active { border-color: var(--gold); color: var(--black); background: var(--gold); box-shadow: 0 0 20px rgba(217,164,65,.32); transform: translateY(-1px); }
+.token-ribbon button.active small { color: rgba(10,12,16,.68); }
+.explanation-panel { top: 23%; bottom: 18%; width: clamp(320px,24vw,440px); }
+.explanation-panel h2 { margin-bottom: .6rem; font-size: clamp(1.65rem,2.25vw,2.7rem); }
+.explanation-panel > p { font-size: clamp(.82rem,.9vw,.94rem); line-height: 1.48; }
+.legal-example { margin-top: .75rem; padding: .7rem .85rem; }
+.legal-example p { margin-top: .35rem; font-size: .76rem; line-height: 1.4; }
+.stage-evidence { margin-top: .65rem; }
+.calculation-desk { margin-top: .65rem; padding-top: .6rem; border-top: 1px solid var(--line); display: grid; gap: .5rem; }
+.calculation-title { display: flex; align-items: center; gap: .5rem; }
+.calculation-title span { color: var(--muted); font: 500 .56rem 'JetBrains Mono', monospace; letter-spacing: .07em; text-transform: uppercase; }
+.calculation-title strong { max-width: 10rem; overflow: hidden; color: var(--gold); font: 700 .72rem 'JetBrains Mono', monospace; text-overflow: ellipsis; white-space: nowrap; }
+.plain-calculation { display: flex; flex-wrap: wrap; align-items: center; gap: .38rem; color: var(--muted); font-size: .68rem; }
+.plain-calculation code { padding: .25rem .4rem; border: 1px solid color-mix(in srgb, var(--gold) 45%, var(--line)); border-radius: 5px; color: var(--gold-soft); background: var(--panel); font: 600 .66rem 'JetBrains Mono', monospace; }
+.plain-calculation p { width: 100%; margin: 0; color: var(--muted); line-height: 1.4; }
+.vector-preview { min-width: 0; display: grid; gap: .25rem; }
+.vector-preview small { color: var(--muted); font: 500 .53rem 'JetBrains Mono', monospace; }
+.vector-preview code { overflow: hidden; color: var(--gold-soft); font: 600 .62rem 'JetBrains Mono', monospace; text-overflow: ellipsis; white-space: nowrap; }
+.vector-pair { min-width: 0; display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr); align-items: center; gap: .45rem; }
+.relation-list, .candidate-list { display: grid; gap: .32rem; }
+.relation-list > div, .candidate-list > div { display: grid; grid-template-columns: minmax(4rem,7rem) 1fr 2rem; align-items: center; gap: .4rem; color: var(--muted); font: 500 .56rem 'JetBrains Mono', monospace; }
+.relation-list span, .candidate-list span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.relation-list i, .candidate-list i { height: 5px; background: var(--raised); }
+.relation-list b, .candidate-list b { height: 100%; display: block; background: var(--gold); box-shadow: 0 0 8px rgba(217,164,65,.35); }
+.relation-list strong, .candidate-list strong { text-align: right; }
+.candidate-list span small { color: var(--muted); font-size: .48rem; }
+.chosen-token { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: .18rem .6rem; }
+.chosen-token span { color: var(--muted); font: 500 .58rem 'JetBrains Mono', monospace; text-transform: uppercase; }
+.chosen-token strong { color: var(--gold); font: 300 1.8rem 'Fraunces', serif; }
+.chosen-token small { grid-column: 1 / -1; color: var(--muted); font: 500 .54rem 'JetBrains Mono', monospace; }
+
+@media (max-width: 900px) {
+  .token-ribbon { left: 12%; right: 12%; top: 18%; }
+}
+
+@media (max-width: 620px) {
+  .input-count { align-items: flex-end; }
+  .token-ribbon { left: 1rem; right: 1rem; top: 14%; }
+  .token-ribbon-heading small { display: none; }
+  .explanation-panel { left: 1rem; right: 1rem; top: auto; bottom: 19%; width: auto; }
+}

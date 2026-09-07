@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import { getSupabaseClient, sanitizeRoom, TransformerBus, type ConnectionState } from './supabase'
 import {
-  generateTransformerSequence, STAGES, type GenerationOptions, type TransformerRun,
+  generateTransformerSequence, STAGES, tokenizeForClassroom, type GenerationOptions, type TransformerRun,
 } from './transformer'
 import { TransformerScene } from './TransformerScene'
 
@@ -178,19 +178,48 @@ const STAGE_STORIES = [
   { technical: 'Decodificação autoregressiva', title: 'Escolher e começar de novo', explanation: 'Uma palavra é adicionada ao texto. Em seguida, todo o processo se repete para escolher a próxima, uma por vez.', analogy: 'A resposta nasce gradualmente; o modelo relê o que já escreveu antes de continuar.' },
 ] as const
 
-function stageEvidence(run: TransformerRun, stage: number) {
-  if (stage === 0) return `${Math.max(0, run.tokens.length - 1)} partes identificadas no texto`
+function visibleToken(token = '') {
+  return token.replace(/ /g, '·').replace(/\n/g, '↵') || '∅'
+}
+
+function stageEvidence(run: TransformerRun, stage: number, tokenIndex: number) {
+  const token = run.tokens[tokenIndex] || ''
+  if (stage === 0) return `${run.totalTokenCount} tokens identificados no texto`
   if (stage === 1) return `Cada parte virou um conjunto de 12 números`
-  if (stage === 2) return `A ordem de ${Math.max(0, run.tokens.length - 1)} partes foi registrada`
+  if (stage === 2) return `“${visibleToken(token)}” ocupa a posição ${tokenIndex + 1}`
   if (stage === 3) {
-    const weights = run.attention[0]?.at(-1) || []
+    const weights = run.attention[0]?.[tokenIndex] || []
     const strongest = weights.reduce((best, value, index) => value > best.value ? { value, index } : best, { value: -1, index: 0 })
-    return `Nesta leitura, “${run.tokens.at(-1)}” consultou mais “${run.tokens[strongest.index]}”`
+    return `“${visibleToken(token)}” consultou mais “${visibleToken(run.tokens[strongest.index])}”`
   }
   if (stage === 4) return 'A informação inicial foi mantida junto das novas relações'
   if (stage === 5) return 'A representação foi ampliada, revisada e condensada novamente'
   if (stage === 6) return run.candidates.slice(0, 3).map((candidate) => `${candidate.token} ${Math.round(candidate.probability * 100)}%`).join(' · ')
   return `Palavra escolhida: “${run.selected}”`
+}
+
+function VectorPreview({ values, label }: { values: number[]; label: string }) {
+  return <div className="vector-preview"><small>{label}</small><code>[{values.slice(0, 5).map((value) => value.toFixed(2)).join(', ')} …]</code></div>
+}
+
+function CalculationDesk({ run, stage, tokenIndex }: { run: TransformerRun; stage: number; tokenIndex: number }) {
+  const token = run.tokens[tokenIndex] || ''
+  const id = run.tokenIds[tokenIndex] || 0
+  const attention = run.attention[0]?.[tokenIndex] || []
+  const relations = attention.map((value, index) => ({ value, index })).filter(({ index }) => index <= tokenIndex).sort((a, b) => b.value - a.value).slice(0, 3)
+  return (
+    <div className="calculation-desk">
+      <div className="calculation-title"><span>Seguindo este token</span><strong>“{visibleToken(token)}”</strong></div>
+      {stage === 0 && <div className="plain-calculation"><code>{visibleToken(token)}</code><ArrowRight size={14} /><code>ID {id}</code><p>O texto foi cortado em partes reconhecidas pelo vocabulário do modelo.</p></div>}
+      {stage === 1 && <><div className="plain-calculation"><code>ID {id}</code><ArrowRight size={14} /><span>linha {id} da tabela aprendida</span></div><VectorPreview label="representação didática · primeiras 5 de 12 posições" values={run.embeddings[tokenIndex] || []} /></>}
+      {stage === 2 && <><div className="plain-calculation"><span>representação</span><strong>+</strong><span>posição {tokenIndex + 1}</span><strong>=</strong><span>ordem registrada</span></div><VectorPreview label="depois de marcar a posição" values={run.positioned[tokenIndex] || []} /></>}
+      {stage === 3 && <div className="relation-list">{relations.map(({ value, index }) => <div key={index}><span>“{visibleToken(run.tokens[index])}”</span><i><b style={{ width: `${Math.max(3, value * 100)}%` }} /></i><strong>{Math.round(value * 100)}%</strong></div>)}</div>}
+      {stage === 4 && <div className="vector-pair"><VectorPreview label="antes: ordem + significado" values={run.positioned[tokenIndex] || []} /><ArrowRight size={15} /><VectorPreview label="depois: texto + relações preservados" values={run.residual[tokenIndex] || []} /></div>}
+      {stage === 5 && <div className="vector-pair"><VectorPreview label="antes da revisão" values={run.residual[tokenIndex] || []} /><ArrowRight size={15} /><VectorPreview label="depois da revisão" values={run.feedForward[tokenIndex] || []} /></div>}
+      {stage === 6 && <div className="candidate-list">{run.candidates.slice(0, 4).map((candidate) => <div key={candidate.token}><span>“{candidate.token}” <small>ID {candidate.tokenId}</small></span><i><b style={{ width: `${Math.max(3, candidate.probability * 100)}%` }} /></i><strong>{Math.round(candidate.probability * 100)}%</strong></div>)}</div>}
+      {stage === 7 && <div className="chosen-token"><span>Próxima parte escolhida</span><strong>“{run.selected}”</strong><small>ID {run.selectedId} · agora o processo recomeça</small></div>}
+    </div>
+  )
 }
 
 function Home({ room, setRoom }: { room: string; setRoom: (value: string) => void }) {
@@ -215,6 +244,7 @@ function InputPage({ room }: { room: string }) {
   const [temperature, setTemperature] = useState(.7)
   const [maxTokens, setMaxTokens] = useState(3)
   const [sent, setSent] = useState(false)
+  const promptTokens = useMemo(() => tokenizeForClassroom(prompt), [prompt])
   useEffect(() => {
     bus.current = new TransformerBus(room, 'tablet')
     bus.current.connect(setConnection)
@@ -237,8 +267,8 @@ function InputPage({ room }: { room: string }) {
       <span className="eyebrow">Sala {room}</span><h1>Escreva um prompt</h1>
       <p>Faça uma pergunta curta. A projeção mostrará como a máquina separa o texto, procura relações e escolhe cada palavra da resposta.</p>
       <form onSubmit={(event) => void submit(event)}>
-        <textarea maxLength={180} value={prompt} onChange={(event) => { setPrompt(event.target.value); setSent(false) }} placeholder="Digite uma pergunta…" />
-        <small>{prompt.length}/180 caracteres</small>
+        <textarea maxLength={140} value={prompt} onChange={(event) => { setPrompt(event.target.value); setSent(false) }} placeholder="Digite uma pergunta…" />
+        <div className="input-count"><small>{promptTokens.total} tokens{promptTokens.total > 24 ? ' · os 24 mais recentes serão demonstrados' : ''}</small><small>{prompt.length}/140 caracteres</small></div>
         <div className="generation-settings">
           <label><span>Liberdade de escolha <strong>{temperature.toFixed(1)}</strong></span><input type="range" min="0.2" max="1.4" step="0.1" value={temperature} onChange={(event) => { setTemperature(Number(event.target.value)); setSent(false) }} /><small>Mais previsível</small><small>Mais variada</small></label>
           <fieldset><legend>Palavras a acompanhar</legend>{[1, 3, 5].map((value) => <button key={value} type="button" className={maxTokens === value ? 'active' : ''} onClick={() => { setMaxTokens(value); setSent(false) }}>{value}</button>)}</fieldset>
@@ -262,6 +292,7 @@ function DisplayPage({ room }: { room: string }) {
   const [stage, setStage] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [isDemo, setIsDemo] = useState(true)
+  const [focusToken, setFocusToken] = useState<number | null>(null)
   const [viewResetId, setViewResetId] = useState(0)
   const [theme, setTheme] = useState<'dark' | 'light'>(() => localStorage.getItem('transformer-theme') === 'light' ? 'light' : 'dark')
   const stop = useCallback(() => {
@@ -276,6 +307,7 @@ function DisplayPage({ room }: { room: string }) {
     setIsDemo(demo)
     setCycle(0)
     setStage(0)
+    setFocusToken(null)
     setIsPlaying(true)
     let stageValue = 0
     let cycleValue = 0
@@ -288,6 +320,7 @@ function DisplayPage({ room }: { room: string }) {
         stageValue = 0
         setCycle(cycleValue)
         setStage(0)
+        setFocusToken(null)
       } else stop()
     }, 1250)
   }, [stop])
@@ -312,6 +345,7 @@ function DisplayPage({ room }: { room: string }) {
       setIsDemo(true)
       setCycle(0)
       setStage(0)
+      setFocusToken(null)
     })
     bus.current.connect(setConnection)
     return () => { stop(); bus.current?.disconnect() }
@@ -320,8 +354,9 @@ function DisplayPage({ room }: { room: string }) {
   const sampleRuns = useMemo(() => runs.length ? runs : generateTransformerSequence('Como um Transformer entende contexto?', { temperature: .7, maxTokens: 3 }), [runs])
   const sample = sampleRuns[Math.min(cycle, sampleRuns.length - 1)]
   const story = STAGE_STORIES[stage]
+  const activeTokenIndex = Math.max(0, Math.min(focusToken ?? sample.tokens.length - 1, sample.tokens.length - 1))
   const selectStage = useCallback((index: number) => { stop(); setStage(Math.max(0, Math.min(STAGES.length - 1, index))) }, [stop])
-  const selectCycle = (index: number) => { stop(); setCycle(Math.max(0, Math.min(sampleRuns.length - 1, index))); setStage(0) }
+  const selectCycle = (index: number) => { stop(); setCycle(Math.max(0, Math.min(sampleRuns.length - 1, index))); setStage(0); setFocusToken(null) }
   const previous = () => { stop(); if (stage > 0) setStage(stage - 1); else if (cycle > 0) { setCycle(cycle - 1); setStage(STAGES.length - 1) } }
   const next = () => { stop(); if (stage < STAGES.length - 1) setStage(stage + 1); else if (cycle < sampleRuns.length - 1) { setCycle(cycle + 1); setStage(0) } }
 
@@ -343,7 +378,7 @@ function DisplayPage({ room }: { room: string }) {
 
   return (
     <main className={`display-page ${theme}`}>
-      <TransformerScene run={sample} activeStage={stage} theme={theme} resetId={viewResetId} onSelectStage={selectStage} />
+      <TransformerScene run={sample} activeStage={stage} selectedTokenIndex={activeTokenIndex} theme={theme} resetId={viewResetId} onSelectStage={selectStage} />
       <header className="display-header">
         <div><Brand compact /><span className="eyebrow">Transformer generativo · Sala {room}</span><h1>Como uma máquina constrói uma resposta?</h1></div>
         <div className="header-actions">
@@ -355,13 +390,18 @@ function DisplayPage({ room }: { room: string }) {
         </div>
       </header>
       <section className="prompt-card"><span>{isDemo ? 'Exemplo inicial' : 'Pergunta do aluno'}</span><p>{sample.prompt}</p><small>Grau de variação {sample.temperature.toFixed(1)} · {sampleRuns.length} palavra{sampleRuns.length > 1 ? 's' : ''}</small></section>
+      <section className="token-ribbon" aria-label="Tokens reais do texto">
+        <div className="token-ribbon-heading"><span>Texto convertido em partes</span><small>BPE o200k_base · {sample.totalTokenCount} tokens{sample.contextTruncated ? ' · mostrando os 24 mais recentes' : ''}</small></div>
+        <div>{sample.tokens.map((token, index) => <button key={`${sample.cycle}-${index}-${sample.tokenIds[index]}`} className={index === activeTokenIndex ? 'active' : ''} onClick={() => { stop(); setFocusToken(index) }} title={`Token “${token}” · ID ${sample.tokenIds[index]}`}><span>{visibleToken(token)}</span><small>{sample.tokenIds[index]}</small></button>)}</div>
+      </section>
       <section className="explanation-panel" aria-live="polite">
         <div className="explanation-number">0{stage + 1}</div>
         <span className="eyebrow">{story.technical}</span>
         <h2>{story.title}</h2>
         <p>{story.explanation}</p>
         <div className="legal-example"><small>Exemplo para a leitura jurídica</small><p>{story.analogy}</p></div>
-        <strong className="stage-evidence">{stageEvidence(sample, stage)}</strong>
+        <strong className="stage-evidence">{stageEvidence(sample, stage, activeTokenIndex)}</strong>
+        <CalculationDesk run={sample} stage={stage} tokenIndex={activeTokenIndex} />
         {stage === 7 && <p className="generated-sentence">{sample.generated}</p>}
       </section>
       <div className="scene-controls-hint">Arraste para girar <span>·</span> Roda ou pinça para aproximar <span>·</span> Clique em uma camada para explorar</div>

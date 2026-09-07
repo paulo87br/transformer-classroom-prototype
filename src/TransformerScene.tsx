@@ -29,7 +29,7 @@ function addBox(group: THREE.Group, materials: THREE.MeshBasicMaterial[], stage:
   materials.push(material)
 }
 
-function buildLayer(stage: number, run: TransformerRun, theme: SceneTheme): LayerObject {
+function buildLayer(stage: number, run: TransformerRun, theme: SceneTheme, selectedTokenIndex: number): LayerObject {
   const palette = PALETTES[theme]
   const group = new THREE.Group()
   const materials: THREE.MeshBasicMaterial[] = []
@@ -53,7 +53,7 @@ function buildLayer(stage: number, run: TransformerRun, theme: SceneTheme): Laye
     }
   } else if (stage === 3) {
     for (let head = 0; head < 3; head += 1) {
-      const weights = run.attention[head]?.at(-1) || []
+      const weights = run.attention[head]?.[selectedTokenIndex] || []
       const count = Math.min(weights.length, 10)
       for (let index = 0; index < count; index += 1) {
         const weight = weights[index] || 0
@@ -86,9 +86,10 @@ function buildLayer(stage: number, run: TransformerRun, theme: SceneTheme): Laye
   return { group, materials, baseX: LAYER_X[stage] }
 }
 
-export function TransformerScene({ run, activeStage, theme, resetId, onSelectStage }: {
+export function TransformerScene({ run, activeStage, selectedTokenIndex, theme, resetId, onSelectStage }: {
   run: TransformerRun
   activeStage: number
+  selectedTokenIndex: number
   theme: SceneTheme
   resetId: number
   onSelectStage: (stage: number) => void
@@ -218,9 +219,9 @@ export function TransformerScene({ run, activeStage, theme, resetId, onSelectSta
         if (object instanceof THREE.Mesh) { object.geometry.dispose(); (object.material as THREE.Material).dispose() }
       })
     })
-    layersRef.current = LAYER_X.map((_, stage) => buildLayer(stage, run, theme))
+    layersRef.current = LAYER_X.map((_, stage) => buildLayer(stage, run, theme, selectedTokenIndex))
     layersRef.current.forEach((layer) => rendererScene.add(layer.group))
-  }, [run, theme])
+  }, [run, selectedTokenIndex, theme])
 
   useEffect(() => {
     const camera = cameraRef.current

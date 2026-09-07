@@ -1,3 +1,5 @@
+import { decode, encode } from 'gpt-tokenizer'
+
 export const STAGES = [
   'Separar',
   'Representar',
@@ -9,7 +11,8 @@ export const STAGES = [
   'Continuar',
 ] as const
 
-export type Candidate = { token: string; probability: number }
+export type Candidate = { token: string; tokenId: number; probability: number }
+export type ClassroomToken = { id: number; text: string; display: string }
 export type GenerationOptions = { temperature: number; maxTokens: number }
 
 export type TransformerRun = {
@@ -18,6 +21,9 @@ export type TransformerRun = {
   cycle: number
   temperature: number
   tokens: string[]
+  tokenIds: number[]
+  totalTokenCount: number
+  contextTruncated: boolean
   embeddings: number[][]
   positioned: number[][]
   attention: number[][][]
@@ -25,6 +31,7 @@ export type TransformerRun = {
   feedForward: number[][]
   candidates: Candidate[]
   selected: string
+  selectedId: number
   generated: string
 }
 
@@ -54,8 +61,8 @@ function random(seed: number) {
   }
 }
 
-function tokenVector(token: string) {
-  const next = random(hash(token.toLocaleLowerCase('pt-BR')))
+function tokenVector(token: string | number) {
+  const next = random(hash(String(token).toLocaleLowerCase('pt-BR')))
   return Array.from({ length: DIMENSION }, () => next() * 2 - 1)
 }
 
@@ -82,14 +89,19 @@ function normalize(values: number[]) {
   return values.map((value) => (value - mean) / deviation)
 }
 
-function tokenize(context: string) {
-  const pieces = context.trim().match(/[\p{L}\p{N}]+|[^\s\p{L}\p{N}]/gu) || []
-  return ['〈BOS〉', ...pieces.slice(-11)]
+export function tokenizeForClassroom(context: string, limit = 24) {
+  const allIds = encode(context)
+  const ids = allIds.slice(-limit)
+  const tokens: ClassroomToken[] = ids.map((id) => {
+    const text = decode([id])
+    return { id, text, display: text.replace(/ /g, '·').replace(/\n/g, '↵') || '∅' }
+  })
+  return { tokens, total: allIds.length, truncated: allIds.length > ids.length }
 }
 
 function keywordBias(context: string, candidate: string) {
   const text = context.toLocaleLowerCase('pt-BR')
-  const last = tokenize(context).at(-1) || ''
+  const last = context.toLocaleLowerCase('pt-BR').match(/[\p{L}\p{N}]+|[^\s\p{L}\p{N}]/gu)?.at(-1) || ''
   let bias = 0
   if (/^(o que|como|por que|qual)/.test(text) && candidate === 'é') bias += 1.2
   if (/(rede|modelo|máquina|ia)/.test(text) && candidate === 'aprende') bias += 1.35
@@ -111,9 +123,9 @@ function selectCandidate(candidates: Candidate[], seed: number) {
   let cumulative = 0
   for (const candidate of candidates) {
     cumulative += candidate.probability
-    if (value <= cumulative) return candidate.token
+    if (value <= cumulative) return candidate
   }
-  return candidates.at(-1)?.token || ''
+  return candidates.at(-1) || { token: '', tokenId: 0, probability: 0 }
 }
 
 export function runTinyTransformer(
@@ -123,8 +135,10 @@ export function runTinyTransformer(
   const temperature = Math.max(0.2, Math.min(1.4, options.temperature ?? 0.7))
   const cycle = Math.max(0, options.cycle ?? 0)
   const prompt = options.originalPrompt || context
-  const tokens = tokenize(context)
-  const embeddings = tokens.map(tokenVector)
+  const tokenization = tokenizeForClassroom(context)
+  const tokens = tokenization.tokens.map((token) => token.text)
+  const tokenIds = tokenization.tokens.map((token) => token.id)
+  const embeddings = tokenIds.map(tokenVector)
   const positioned = embeddings.map((vector, position) => vector.map((value, dimension) => {
     const frequency = 1 / (10000 ** (2 * Math.floor(dimension / 2) / DIMENSION))
     const positionSignal = dimension % 2 === 0 ? Math.sin(position * frequency) : Math.cos(position * frequency)
@@ -166,15 +180,17 @@ export function runTinyTransformer(
   })
 
   const last = feedForward.at(-1) || Array(DIMENSION).fill(0)
-  const logits = CANDIDATES.map((candidate) => {
-    const outputVector = tokenVector(`saída:${candidate}`)
+  const candidateIds = CANDIDATES.map((candidate) => encode(candidate === '.' ? candidate : ` ${candidate}`)[0] || hash(candidate))
+  const logits = CANDIDATES.map((candidate, candidateIndex) => {
+    const outputVector = tokenVector(candidateIds[candidateIndex])
     const score = last.reduce((sum, value, index) => sum + value * outputVector[index], 0) / Math.sqrt(DIMENSION)
     return (score + keywordBias(context, candidate)) / temperature
   })
   const probabilities = softmax(logits)
-  const candidates = CANDIDATES.map((token, index) => ({ token, probability: probabilities[index] }))
+  const candidates = CANDIDATES.map((token, index) => ({ token, tokenId: candidateIds[index], probability: probabilities[index] }))
     .sort((a, b) => b.probability - a.probability)
-  const selected = selectCandidate(candidates, hash(`${context}|${cycle}|${temperature}`))
+  const selectedCandidate = selectCandidate(candidates, hash(`${context}|${cycle}|${temperature}`))
+  const selected = selectedCandidate.token
 
   return {
     prompt,
@@ -182,6 +198,9 @@ export function runTinyTransformer(
     cycle,
     temperature,
     tokens,
+    tokenIds,
+    totalTokenCount: tokenization.total,
+    contextTruncated: tokenization.truncated,
     embeddings,
     positioned,
     attention,
@@ -189,6 +208,7 @@ export function runTinyTransformer(
     feedForward,
     candidates,
     selected,
+    selectedId: selectedCandidate.tokenId,
     generated: appendToken(context, selected),
   }
 }
