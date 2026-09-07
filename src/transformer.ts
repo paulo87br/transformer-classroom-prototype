@@ -1,12 +1,12 @@
 export const STAGES = [
-  'Tokens',
-  'Embeddings',
-  'Posição',
-  'Atenção',
-  'Residual',
-  'Feed-forward',
-  'Logits',
-  'Geração',
+  'Separar',
+  'Representar',
+  'Ordenar',
+  'Relacionar',
+  'Preservar',
+  'Refinar',
+  'Comparar',
+  'Continuar',
 ] as const
 
 export type Candidate = { token: string; probability: number }
