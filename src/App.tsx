@@ -169,14 +169,14 @@ function Connection({ state }: { state: ConnectionState }) {
 }
 
 const STAGE_STORIES = [
-  { technical: 'Tokenização', title: 'Separar o texto', explanation: 'A máquina começa dividindo a frase em pequenas partes. Ela ainda não entende o assunto: apenas organiza o material que recebeu.', analogy: 'Como separar uma petição em fatos, fundamentos e pedidos antes de iniciar a leitura.' },
-  { technical: 'Embeddings', title: 'Transformar palavras em números', explanation: 'Computadores calculam números, não palavras. Cada parte do texto recebe uma representação numérica que permite comparações.', analogy: 'Como cadastrar cada documento por assunto, origem e relevância para poder relacioná-los depois.' },
-  { technical: 'Codificação posicional', title: 'Registrar a ordem', explanation: 'A posição muda o sentido. O modelo marca onde cada parte aparece para não tratar frases com palavras iguais como se fossem idênticas.', analogy: '“O autor acusa o réu” não significa o mesmo que “o réu acusa o autor”.' },
-  { technical: 'Autoatenção', title: 'Procurar relações', explanation: 'Cada parte consulta as anteriores e decide quais ajudam mais a interpretar o que está sendo lido agora.', analogy: 'Como perceber que “ela” retoma uma pessoa citada antes ou que uma exceção altera uma regra anterior.' },
-  { technical: 'Conexão residual', title: 'Preservar o texto original', explanation: 'As relações encontradas são acrescentadas sem apagar a informação inicial. Isso reduz a perda de sentido ao longo do caminho.', analogy: 'Como fazer anotações sobre uma lei mantendo o texto legal sempre disponível para conferência.' },
-  { technical: 'Rede feed-forward', title: 'Refinar a interpretação', explanation: 'O modelo faz uma revisão interna de cada parte já contextualizada e destaca combinações que podem ser úteis para continuar.', analogy: 'Como reler um argumento depois de conhecer todo o contexto do caso.' },
-  { technical: 'Logits e probabilidades', title: 'Comparar continuações', explanation: 'Várias palavras possíveis recebem uma pontuação. A máquina não encontra uma resposta pronta: ela escolhe entre alternativas.', analogy: 'Como ordenar hipóteses por plausibilidade — maior pontuação não significa certeza.' },
-  { technical: 'Decodificação autoregressiva', title: 'Escolher e começar de novo', explanation: 'Uma palavra é adicionada ao texto. Em seguida, todo o processo se repete para escolher a próxima, uma por vez.', analogy: 'A resposta nasce gradualmente; o modelo relê o que já escreveu antes de continuar.' },
+  { technical: 'Tokenização', title: 'Separar o texto', explanation: 'A máquina começa dividindo a frase em pequenas partes. Ela ainda não interpreta a mensagem: primeiro organiza o material recebido.', analogy: 'Como separar as peças de um jogo antes de descobrir como elas se conectam.' },
+  { technical: 'Embeddings', title: 'Transformar texto em números', explanation: 'Computadores calculam números, não palavras. Cada parte recebe uma representação numérica que permite fazer comparações.', analogy: 'Como atribuir características a músicas para aproximar aquelas que têm estilos parecidos.' },
+  { technical: 'Codificação posicional', title: 'Registrar a ordem', explanation: 'A posição altera o sentido. O modelo registra onde cada parte aparece para preservar a sequência da mensagem.', analogy: '“O cachorro perseguiu o gato” não significa o mesmo que “o gato perseguiu o cachorro”.' },
+  { technical: 'Autoatenção', title: 'Procurar relações', explanation: 'Cada parte consulta as anteriores e calcula quais delas ajudam mais a compreender o contexto atual.', analogy: 'Em “Ana pegou o livro porque ela precisava estudar”, entendemos a quem “ela” se refere.' },
+  { technical: 'Conexão residual', title: 'Preservar a informação inicial', explanation: 'As novas relações são acrescentadas sem apagar a informação original. Isso reduz a perda de sentido pelo caminho.', analogy: 'Como fazer anotações em uma receita sem apagar as instruções originais.' },
+  { technical: 'Rede feed-forward', title: 'Refinar a interpretação', explanation: 'Cada parte contextualizada passa por novos cálculos que destacam combinações úteis para produzir a resposta.', analogy: 'Como reler uma mensagem depois de compreender toda a conversa.' },
+  { technical: 'Logits e probabilidades', title: 'Comparar continuações', explanation: 'Várias continuações recebem pontuações. A máquina não encontra uma frase pronta: ela compara possibilidades.', analogy: 'Como o teclado do celular sugere palavras diferentes enquanto digitamos.' },
+  { technical: 'Decodificação autoregressiva', title: 'Escolher e começar de novo', explanation: 'Uma parte é adicionada à resposta e todo o processo se repete para escolher a próxima, uma de cada vez.', analogy: 'A resposta é construída como uma frase digitada passo a passo, sempre considerando o que já foi escrito.' },
 ] as const
 
 function visibleToken(token = '') {
@@ -324,8 +324,8 @@ function DisplayPage({ room }: { room: string }) {
     setResultOpen(false)
     setSelectedOutput(0)
     setTrace(null)
-    setTraceState(demo ? 'fallback' : 'loading')
-    if (!demo) void requestGeneration(prompt, options.temperature).then((result) => {
+    setTraceState('loading')
+    void requestGeneration(prompt, options.temperature).then((result) => {
       setTrace(result)
       setTraceState('model')
     }).catch(() => setTraceState('fallback'))
@@ -350,7 +350,7 @@ function DisplayPage({ room }: { room: string }) {
   }, [stop])
 
   useEffect(() => {
-    preparePrompt('Como uma decisão anterior influencia um novo caso?', { temperature: .7, maxTokens: 12 }, true)
+    preparePrompt('Como a inteligência artificial transforma uma pergunta em resposta?', { temperature: .7, maxTokens: 12 }, true)
     return stop
   }, [preparePrompt, stop])
 
@@ -363,7 +363,7 @@ function DisplayPage({ room }: { room: string }) {
         maxTokens: typeof maxTokens === 'number' ? Math.max(12, maxTokens) : 12,
       }, false)
     })
-    bus.current.on('clear', () => preparePrompt('Como uma decisão anterior influencia um novo caso?', { temperature: .7, maxTokens: 12 }, true))
+    bus.current.on('clear', () => preparePrompt('Como a inteligência artificial transforma uma pergunta em resposta?', { temperature: .7, maxTokens: 12 }, true))
     bus.current.connect(setConnection)
     return () => { stop(); bus.current?.disconnect() }
   }, [preparePrompt, room, stop])
@@ -443,12 +443,12 @@ function DisplayPage({ room }: { room: string }) {
 
       <section className="explanation-panel" aria-live="polite">
         <div className="explanation-number">0{stage + 1}</div><span className="eyebrow">{story.technical}</span><h2>{story.title}</h2><p>{story.explanation}</p>
-        <div className="legal-example"><small>Exemplo para a leitura jurídica</small><p>{story.analogy}</p></div>
+        <div className="legal-example"><small>Exemplo cotidiano</small><p>{story.analogy}</p></div>
         <strong className="stage-evidence">{stageEvidence(sample, stage, activeTokenIndex)}</strong>
         <CalculationDesk run={sample} stage={stage} tokenIndex={activeTokenIndex} />
       </section>
 
-      <footer className="timeline"><div className="flow-status">{awaitingChoice ? 'Escolha e confirme um token' : flowComplete ? 'Percurso concluído' : `Etapa ${stage + 1} de 8`}</div><div className="nav"><button onClick={previous} disabled={awaitingChoice || stage === 0}><ChevronLeft /></button><button onClick={next} disabled={awaitingChoice || (flowComplete && stage === 7)}><ChevronRight /></button><button className="reveal-button" disabled={!flowComplete} onClick={() => setResultOpen(true)}><Eye size={17} /> {traceState === 'loading' ? 'Preparando resposta' : 'Revelar resposta'}</button></div></footer>
+      <footer className="timeline"><div className="flow-status">{awaitingChoice ? 'Escolha e confirme um token' : flowComplete ? 'Percurso concluído' : `Etapa ${stage + 1} de 8`}</div><div className="nav"><button onClick={previous} disabled={awaitingChoice || stage === 0}><ChevronLeft /></button><button onClick={next} disabled={awaitingChoice || (flowComplete && stage === 7)}><ChevronRight /></button><button className="reveal-button" disabled={!flowComplete || traceState === 'loading'} onClick={() => setResultOpen(true)}><Eye size={17} /> {traceState === 'loading' ? 'Preparando resposta' : 'Revelar resposta'}</button></div></footer>
 
       {resultOpen && <div className="result-modal" role="dialog" aria-modal="true" aria-label="Resposta gerada"><div className="result-dialog"><button className="close-result" onClick={() => setResultOpen(false)} aria-label="Fechar"><X /></button><span className="eyebrow">{traceState === 'model' ? `Resultado real · ${trace?.model}` : 'Resultado do modelo didático'}</span><h2>A resposta foi construída</h2><p className="final-answer">{finalText}</p><div className="output-token-list">{outputTokens.map((token, index) => <button key={`${index}-${token.text}`} className={selectedOutput === index ? 'active' : ''} onClick={() => setSelectedOutput(index)}>{visibleToken(token.text)}</button>)}</div>{inspectedOutput && <div className="probability-inspector"><div><small>Token escolhido</small><strong>“{visibleToken(inspectedOutput.text)}”</strong><b>{(inspectedOutput.probability * 100).toFixed(1)}%</b></div><span>Concorreu com</span>{inspectedOutput.alternatives.slice(0, 5).map((alternative, index) => <div className="probability-row" key={`${index}-${alternative.text}`}><span>“{visibleToken(alternative.text)}”</span><i><b style={{ width: `${Math.max(2, alternative.probability * 100)}%` }} /></i><strong>{(alternative.probability * 100).toFixed(1)}%</strong></div>)}</div>}<small className="result-source">{traceState === 'model' ? 'Probabilidades informadas pelo modelo via LangChain.' : 'Probabilidades calculadas pelo mini-Transformer determinístico.'}</small></div></div>}
     </main>
