@@ -4,7 +4,7 @@ import {
   ArrowRight, ChevronLeft, ChevronRight, Eraser, LogIn, LogOut, Maximize,
   Eye, Moon, Pause, Play, Radio, RotateCcw, Send, Sun, X,
 } from 'lucide-react'
-import { getSupabaseClient, sanitizeRoom, TransformerBus, type ConnectionState } from './supabase'
+import { getSupabaseClient, initializeSupabaseClient, sanitizeRoom, TransformerBus, type ConnectionState } from './supabase'
 import {
   generateTransformerSequence, STAGES, tokenizeForClassroom, type GenerationOptions, type TransformerRun,
 } from './transformer'
@@ -30,13 +30,25 @@ function Brand({ compact = false }: { compact?: boolean }) {
 type AuthState = 'booting' | 'anonymous' | 'checking' | 'authenticated' | 'unauthorized' | 'error' | 'configuration'
 
 function AuthGate({ children }: { children: ReactNode }) {
-  const client = getSupabaseClient()
+  const [client, setClient] = useState(() => getSupabaseClient())
+  const [configurationResolved, setConfigurationResolved] = useState(Boolean(client))
   const [state, setState] = useState<AuthState>('booting')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [message, setMessage] = useState('')
   const authorizedId = useRef<string | null>(null)
   const pendingId = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (client) return
+    let active = true
+    void initializeSupabaseClient().then((configuredClient) => {
+      if (!active) return
+      setClient(configuredClient)
+      setConfigurationResolved(true)
+    })
+    return () => { active = false }
+  }, [client])
 
   const authorize = useCallback(async (session: Session) => {
     if (!client) return
@@ -63,6 +75,7 @@ function AuthGate({ children }: { children: ReactNode }) {
   }, [client])
 
   useEffect(() => {
+    if (!configurationResolved) return
     if (!client) {
       setState('configuration')
       return
@@ -92,7 +105,7 @@ function AuthGate({ children }: { children: ReactNode }) {
       active = false
       listener.subscription.unsubscribe()
     }
-  }, [authorize, client])
+  }, [authorize, client, configurationResolved])
 
   const signIn = async (event: FormEvent) => {
     event.preventDefault()
@@ -433,22 +446,22 @@ function DisplayPage({ room }: { room: string }) {
         <div className="token-list">{sample.tokens.map((token, index) => <button key={`${index}-${sample.tokenIds[index]}`} className={index === activeTokenIndex ? 'active' : ''} onClick={() => chooseToken(index)}><span>{visibleToken(token)}</span><small>ID {sample.tokenIds[index]}</small></button>)}</div>
         {awaitingChoice && <button className="follow-button" onClick={() => startJourney(0)}><Play size={15} /> Acompanhar “{visibleToken(sample.tokens[activeTokenIndex])}”</button>}
         {flowComplete && <button className="follow-button secondary-follow" onClick={() => { setAwaitingChoice(true); setStage(0) }}><RotateCcw size={15} /> Escolher outro token</button>}
-        <div className="scene-controls-hint">Arraste para girar · Roda ou pinça para aproximar</div>
+        <div className="scene-controls-hint" aria-hidden="true">Arraste para girar · Roda ou pinça para aproximar</div>
       </section>
 
       <section className="stage-progress-top">
         <div className="stage-transform"><small>Token acompanhado</small><strong>“{visibleToken(sample.tokens[activeTokenIndex])}”</strong><ArrowRight size={16} /><span>{story.title}</span></div>
-        <div className="steps">{STAGES.map((label, index) => <button key={label} className={`${index < stage ? 'reached' : ''} ${index === stage ? 'current' : ''}`} onClick={() => selectStage(index)}><span>{index + 1}</span><b>{label}</b></button>)}</div>
+        <div className="steps" aria-label="Etapas do Transformer">{STAGES.map((label, index) => <button key={label} className={`${index < stage ? 'reached' : ''} ${index === stage ? 'current' : ''}`} aria-current={index === stage ? 'step' : undefined} aria-label={`Etapa ${index + 1}: ${label}`} onClick={() => selectStage(index)}><span>{index + 1}</span><b>{label}</b></button>)}</div>
       </section>
 
-      <section className="explanation-panel" aria-live="polite">
+      <section className="explanation-panel" aria-live="polite" aria-label={`Explicação da etapa ${stage + 1}: ${story.title}`} tabIndex={0}>
         <div className="explanation-number">0{stage + 1}</div><span className="eyebrow">{story.technical}</span><h2>{story.title}</h2><p>{story.explanation}</p>
         <div className="legal-example"><small>Exemplo cotidiano</small><p>{story.analogy}</p></div>
         <strong className="stage-evidence">{stageEvidence(sample, stage, activeTokenIndex)}</strong>
         <CalculationDesk run={sample} stage={stage} tokenIndex={activeTokenIndex} />
       </section>
 
-      <footer className="timeline"><div className="flow-status">{awaitingChoice ? 'Escolha e confirme um token' : flowComplete ? 'Percurso concluído' : `Etapa ${stage + 1} de 8`}</div><div className="nav"><button onClick={previous} disabled={awaitingChoice || stage === 0}><ChevronLeft /></button><button onClick={next} disabled={awaitingChoice || (flowComplete && stage === 7)}><ChevronRight /></button><button className="reveal-button" disabled={!flowComplete || traceState === 'loading'} onClick={() => setResultOpen(true)}><Eye size={17} /> {traceState === 'loading' ? 'Preparando resposta' : 'Revelar resposta'}</button></div></footer>
+      <footer className="timeline"><div className="flow-status">{awaitingChoice ? 'Escolha e confirme um token' : flowComplete ? 'Percurso concluído' : `Etapa ${stage + 1} de 8`}</div><div className="nav"><button onClick={previous} disabled={awaitingChoice || stage === 0} aria-label="Etapa anterior"><ChevronLeft /></button><button onClick={next} disabled={awaitingChoice || (flowComplete && stage === 7)} aria-label="Próxima etapa"><ChevronRight /></button><button className="reveal-button" disabled={!flowComplete || traceState === 'loading'} onClick={() => setResultOpen(true)}><Eye size={17} /> {traceState === 'loading' ? 'Preparando resposta' : 'Revelar resposta'}</button></div></footer>
 
       {resultOpen && <div className="result-modal" role="dialog" aria-modal="true" aria-label="Resposta gerada"><div className="result-dialog"><button className="close-result" onClick={() => setResultOpen(false)} aria-label="Fechar"><X /></button><span className="eyebrow">{traceState === 'model' ? `Resultado real · ${trace?.model}` : 'Resultado do modelo didático'}</span><h2>A resposta foi construída</h2><p className="final-answer">{finalText}</p><div className="output-token-list">{outputTokens.map((token, index) => <button key={`${index}-${token.text}`} className={selectedOutput === index ? 'active' : ''} onClick={() => setSelectedOutput(index)}>{visibleToken(token.text)}</button>)}</div>{inspectedOutput && <div className="probability-inspector"><div><small>Token escolhido</small><strong>“{visibleToken(inspectedOutput.text)}”</strong><b>{(inspectedOutput.probability * 100).toFixed(1)}%</b></div><span>Concorreu com</span>{inspectedOutput.alternatives.slice(0, 5).map((alternative, index) => <div className="probability-row" key={`${index}-${alternative.text}`}><span>“{visibleToken(alternative.text)}”</span><i><b style={{ width: `${Math.max(2, alternative.probability * 100)}%` }} /></i><strong>{(alternative.probability * 100).toFixed(1)}%</strong></div>)}</div>}<small className="result-source">{traceState === 'model' ? 'Probabilidades informadas pelo modelo via LangChain.' : 'Probabilidades calculadas pelo mini-Transformer determinístico.'}</small></div></div>}
     </main>

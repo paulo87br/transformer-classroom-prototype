@@ -1,15 +1,35 @@
 import { createClient, type RealtimeChannel, type SupabaseClient } from '@supabase/supabase-js'
 
 let client: SupabaseClient | null = null
+let initialization: Promise<SupabaseClient | null> | null = null
 
-export function getSupabaseClient() {
-  if (!__SUPABASE_URL__ || !__SUPABASE_PUBLISHABLE_KEY__) return null
+function createConfiguredClient(url: string, publishableKey: string) {
+  if (!url || !publishableKey || publishableKey.startsWith('sb_secret_')) return null
   if (!client) {
-    client = createClient(__SUPABASE_URL__, __SUPABASE_PUBLISHABLE_KEY__, {
+    client = createClient(url, publishableKey, {
       auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
     })
   }
   return client
+}
+
+export function getSupabaseClient() {
+  return client || createConfiguredClient(__SUPABASE_URL__, __SUPABASE_PUBLISHABLE_KEY__)
+}
+
+export function initializeSupabaseClient() {
+  const configured = getSupabaseClient()
+  if (configured) return Promise.resolve(configured)
+  if (!initialization) {
+    initialization = fetch('/api/config', { headers: { Accept: 'application/json' }, cache: 'no-store' })
+      .then(async (response) => {
+        if (!response.ok) return null
+        const configuration = await response.json() as { supabaseUrl?: string; supabasePublishableKey?: string }
+        return createConfiguredClient(configuration.supabaseUrl || '', configuration.supabasePublishableKey || '')
+      })
+      .catch(() => null)
+  }
+  return initialization
 }
 
 export type ConnectionState = 'connecting' | 'connected' | 'local' | 'error'
@@ -30,6 +50,7 @@ export class TransformerBus {
     const handlers = this.handlers.get(event) || new Set<Handler>()
     handlers.add(handler)
     this.handlers.set(event, handlers)
+    return () => handlers.delete(handler)
   }
 
   private dispatch(event: ClassroomEvent, payload: Record<string, unknown>) {
@@ -63,6 +84,7 @@ export class TransformerBus {
     this.local.close()
     if (this.channel) void getSupabaseClient()?.removeChannel(this.channel)
     this.channel = null
+    this.handlers.clear()
   }
 }
 

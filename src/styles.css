@@ -100,7 +100,7 @@ h1, h2 { font-family: 'Fraunces', Georgia, serif; font-weight: 300; }
 .token-list button.active small { color: rgba(10,12,16,.62); }
 .follow-button { width: 100%; min-height: 42px; margin-top: .65rem; border: 1px solid var(--gold); border-radius: 9px; display: flex; align-items: center; justify-content: center; gap: .45rem; color: var(--black); background: var(--gold); font-size: .66rem; font-weight: 700; cursor: pointer; }
 .secondary-follow { color: var(--gold); background: var(--panel); }
-.token-column .scene-controls-hint { position: static; margin-top: auto; color: var(--muted); font: 500 .53rem 'JetBrains Mono', monospace; text-align: left; }
+.token-column .scene-controls-hint { position: static; flex: none; margin-top: .75rem; padding-top: .65rem; border-top: 1px solid var(--line); color: var(--muted); font: 500 .53rem/1.45 'JetBrains Mono', monospace; text-align: left; }
 .stage-progress-top { position: absolute; z-index: 4; left: 27%; right: 28%; top: clamp(205px,23vh,245px); pointer-events: auto; }
 .stage-transform { height: 34px; margin-bottom: .65rem; display: flex; align-items: center; justify-content: center; gap: .55rem; color: var(--muted); font: 500 .65rem 'JetBrains Mono', monospace; }
 .stage-transform small { color: var(--muted); text-transform: uppercase; }
@@ -109,7 +109,11 @@ h1, h2 { font-family: 'Fraunces', Georgia, serif; font-weight: 300; }
 .stage-progress-top .steps { width: 100%; }
 .stage-progress-top .steps button { font-size: .58rem; }
 .stage-progress-top .steps button b { top: 31px; }
-.explanation-panel { top: 30%; bottom: 15%; width: clamp(330px,25vw,465px); overflow-y: auto; justify-content: flex-start; padding-top: .4rem; scrollbar-width: thin; }
+.explanation-panel { top: 30%; bottom: 15%; width: clamp(330px,25vw,465px); min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; justify-content: flex-start; padding-top: .4rem; padding-right: .75rem; pointer-events: auto; scrollbar-color: var(--gold) color-mix(in srgb, var(--line) 55%, transparent); scrollbar-width: thin; touch-action: pan-y; }
+.explanation-panel:focus-visible { outline: 1px solid var(--gold); outline-offset: 5px; }
+.explanation-panel::-webkit-scrollbar { width: 7px; }
+.explanation-panel::-webkit-scrollbar-track { background: color-mix(in srgb, var(--line) 45%, transparent); }
+.explanation-panel::-webkit-scrollbar-thumb { border-radius: 999px; background: var(--gold); }
 .neuron-math { display: grid; gap: .48rem; }
 .math-terms { display: grid; grid-template-columns: 1fr 1fr; gap: .35rem; }
 .math-terms span { min-width: 0; display: grid; gap: .16rem; padding: .35rem .4rem; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
@@ -229,4 +233,18 @@ h1, h2 { font-family: 'Fraunces', Georgia, serif; font-weight: 300; }
   .token-ribbon { left: 1rem; right: 1rem; top: 14%; }
   .token-ribbon-heading small { display: none; }
   .explanation-panel { left: 1rem; right: 1rem; top: auto; bottom: 19%; width: auto; }
+}
+
+@media (max-height: 780px) and (min-width: 701px) {
+  .token-column { top: 27%; bottom: 14%; }
+  .token-column .scene-controls-hint { margin-top: .45rem; padding-top: .45rem; }
+  .explanation-panel { top: 25%; bottom: 15%; }
+}
+
+@media (max-height: 680px) and (min-width: 701px) {
+  .token-column .scene-controls-hint { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }

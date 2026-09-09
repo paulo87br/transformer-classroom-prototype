@@ -27,8 +27,14 @@ Para um endpoint compatível com a API da OpenAI, também podem ser usados `AI_B
 
 O acesso reutiliza a função `public.pulso_is_admin()` do projeto Supabase. A sincronização usa Supabase Realtime Broadcast e também possui fallback local entre abas do mesmo navegador.
 
+`SUPABASE_URL` e `SUPABASE_PUBLISHABLE_KEY` também são lidas por `/api/config`
+em runtime. Assim, as variáveis compartilhadas da Vercel continuam disponíveis
+mesmo quando não foram incorporadas ao bundle estático. A rota recusa chaves
+com prefixo `sb_secret_`.
+
 ```bash
 npm install
+npm run typecheck
 npm run dev
 ```
 
