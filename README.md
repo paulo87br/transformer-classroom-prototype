@@ -38,6 +38,12 @@ npm run typecheck
 npm run dev
 ```
 
+Com as variáveis do Supabase disponíveis no terminal, valide o canal antes da aula:
+
+```bash
+npm run test:realtime
+```
+
 ## Fluxo da aula
 
 O aluno envia o texto pelo tablet. Na projeção, a turma escolhe um token, acompanha obrigatoriamente as oito etapas e então revela a resposta. Cada token da resposta pode ser inspecionado para comparar sua probabilidade com as alternativas concorrentes.

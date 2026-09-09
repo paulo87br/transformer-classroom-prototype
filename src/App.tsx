@@ -1,10 +1,10 @@
-import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { Session } from '@supabase/supabase-js'
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowRight, ChevronLeft, ChevronRight, Eraser, LogIn, LogOut, Maximize,
+  ArrowRight, ChevronLeft, ChevronRight, Eraser, Maximize,
   Eye, Moon, Pause, Play, Radio, RotateCcw, Send, Sun, X,
 } from 'lucide-react'
-import { getSupabaseClient, initializeSupabaseClient, sanitizeRoom, TransformerBus, type ConnectionState } from './supabase'
+import { sanitizeRoom, TransformerBus, type ConnectionState } from './supabase'
+import { AuthGate } from './AuthGate'
 import {
   generateTransformerSequence, STAGES, tokenizeForClassroom, type GenerationOptions, type TransformerRun,
 } from './transformer'
@@ -24,155 +24,6 @@ function Brand({ compact = false }: { compact?: boolean }) {
       </svg>
       <span>Paulo <em>Nascimento</em><small>Laboratório</small></span>
     </a>
-  )
-}
-
-type AuthState = 'booting' | 'anonymous' | 'checking' | 'authenticated' | 'unauthorized' | 'error' | 'configuration'
-
-function AuthGate({ children }: { children: ReactNode }) {
-  const [client, setClient] = useState(() => getSupabaseClient())
-  const [configurationResolved, setConfigurationResolved] = useState(Boolean(client))
-  const [state, setState] = useState<AuthState>('booting')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [message, setMessage] = useState('')
-  const authorizedId = useRef<string | null>(null)
-  const pendingId = useRef<string | null>(null)
-
-  useEffect(() => {
-    if (client) return
-    let active = true
-    void initializeSupabaseClient().then((configuredClient) => {
-      if (!active) return
-      setClient(configuredClient)
-      setConfigurationResolved(true)
-    })
-    return () => { active = false }
-  }, [client])
-
-  const authorize = useCallback(async (session: Session) => {
-    if (!client) return
-    const id = session.user.id
-    if (authorizedId.current === id) {
-      setState('authenticated')
-      return
-    }
-    if (pendingId.current === id) return
-    pendingId.current = id
-    const { data, error } = await client.rpc('pulso_is_admin')
-    if (pendingId.current !== id) return
-    pendingId.current = null
-    if (error) {
-      setMessage('Não foi possível validar o acesso. Tente novamente.')
-      setState('error')
-    } else if (data === true) {
-      authorizedId.current = id
-      setState('authenticated')
-    } else {
-      setMessage(session.user.email || 'Esta conta')
-      setState('unauthorized')
-    }
-  }, [client])
-
-  useEffect(() => {
-    if (!configurationResolved) return
-    if (!client) {
-      setState('configuration')
-      return
-    }
-    let active = true
-    const { data: listener } = client.auth.onAuthStateChange((event, session) => {
-      window.setTimeout(() => {
-        if (!active) return
-        if (event === 'SIGNED_OUT') {
-          authorizedId.current = null
-          pendingId.current = null
-          setState('anonymous')
-        } else if (session && authorizedId.current !== session.user.id) {
-          void authorize(session)
-        }
-      }, 0)
-    })
-    void client.auth.getSession().then(({ data, error }) => {
-      if (!active) return
-      if (error) {
-        setMessage('Não foi possível restaurar sua sessão. Tente novamente.')
-        setState('error')
-      } else if (data.session) void authorize(data.session)
-      else setState('anonymous')
-    })
-    return () => {
-      active = false
-      listener.subscription.unsubscribe()
-    }
-  }, [authorize, client, configurationResolved])
-
-  const signIn = async (event: FormEvent) => {
-    event.preventDefault()
-    if (!client) return
-    setMessage('')
-    setState('checking')
-    const { data, error } = await client.auth.signInWithPassword({ email: email.trim(), password })
-    if (error || !data.session) {
-      setMessage('E-mail ou senha incorretos.')
-      setState('anonymous')
-      return
-    }
-    await authorize(data.session)
-  }
-
-  const signOut = async () => {
-    if (!client) return
-    await client.auth.signOut()
-    authorizedId.current = null
-    pendingId.current = null
-    setPassword('')
-    setMessage('')
-    setState('anonymous')
-  }
-
-  const retryAuthorization = async () => {
-    if (!client) return
-    setMessage('')
-    setState('checking')
-    const { data, error } = await client.auth.getSession()
-    if (error || !data.session) {
-      authorizedId.current = null
-      pendingId.current = null
-      setState('anonymous')
-      return
-    }
-    await authorize(data.session)
-  }
-
-  if (state === 'authenticated') return <>{children}<button className="signout" onClick={() => void signOut()}><LogOut size={15} /> Sair</button></>
-
-  const title = state === 'booting' ? 'Retomando sessão' : state === 'checking' ? 'Verificando acesso' : state === 'unauthorized' ? 'Conta sem acesso' : state === 'error' ? 'Conexão interrompida' : 'Entrar'
-  return (
-    <main className="auth-page">
-      <section className="auth-shell">
-        <Brand />
-        <span className="eyebrow">Transformer ao Vivo</span>
-        <h1>{title}</h1>
-        {state === 'booting' || state === 'checking' ? <div className="loading"><i /> Restaurando seu acesso…</div>
-          : state === 'configuration' ? <p className="form-error">Configure o Supabase para iniciar o laboratório.</p>
-          : state === 'unauthorized' ? <div className="auth-form">
-              <p className="form-error"><strong>{message}</strong> não pertence à lista de administradores.</p>
-              <button className="button secondary" type="button" onClick={() => void signOut()}><LogOut size={18} /> Usar outra conta</button>
-            </div>
-          : state === 'error' ? <div className="auth-form">
-              <p className="form-error">{message}</p>
-              <button className="button secondary" type="button" onClick={() => void retryAuthorization()}><RotateCcw size={18} /> Tentar novamente</button>
-              <button className="button secondary" type="button" onClick={() => void signOut()}><LogOut size={18} /> Sair</button>
-            </div>
-          : <form className="auth-form" onSubmit={(event) => void signIn(event)}>
-              <label>E-mail<input type="email" autoComplete="username" required value={email} onChange={(event) => setEmail(event.target.value)} /></label>
-              <label>Senha<input type="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} /></label>
-              {message && <p className="form-error">{message}</p>}
-              <button className="button primary" type="submit"><LogIn size={18} /> Entrar</button>
-            </form>}
-      </section>
-    </main>
   )
 }
 
@@ -476,5 +327,5 @@ export default function App() {
   let page = <Home room={room} setRoom={setRoom} />
   if (path === '/input') page = <InputPage room={room} />
   if (path === '/display') page = <DisplayPage room={room} />
-  return <AuthGate>{page}</AuthGate>
+  return <AuthGate brand={<Brand />} labName="Transformer ao Vivo">{page}</AuthGate>
 }
