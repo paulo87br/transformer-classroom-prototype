@@ -4,6 +4,9 @@ Protótipo didático para visualizar como um Transformer processa linguagem, sep
 
 - `/input?room=AULA-IA`: entrada do aluno no tablet.
 - `/display?room=AULA-IA`: visualização projetada e navegável.
+- `/teacher?room=AULA-IA`: painel do professor com QR Code e links da sala.
+
+Login e início são leves: Three.js e o tokenizador só são baixados ao abrir a experiência.
 
 ## O que é calculado
 

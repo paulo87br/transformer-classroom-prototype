@@ -182,6 +182,32 @@ h1, h2 { font-family: 'Fraunces', Georgia, serif; font-weight: 300; }
   .tablet-link { width: 40px; padding: 0; justify-content: center; font-size: 0; }
 }
 
+.route-loading { min-height: 100vh; display: grid; place-content: center; gap: .7rem; text-align: center; }
+.route-loading strong { color: var(--bone); font: 300 2.4rem 'Fraunces', serif; }
+.teacher-page { min-height: 100vh; padding: clamp(1.5rem,4vw,4rem); color: var(--bone); background: var(--black); }
+.teacher-page > header { display: flex; align-items: center; justify-content: space-between; }
+.teacher-page > header > a { color: var(--gold); font-size: .75rem; text-decoration: none; }
+.teacher-hero { width: min(1080px,100%); margin: clamp(3rem,8vh,7rem) auto 2rem; display: grid; grid-template-columns: minmax(0,1fr) minmax(250px,340px); align-items: center; gap: clamp(2rem,7vw,7rem); }
+.teacher-hero h1 { margin: .7rem 0 1rem; font: 300 clamp(3rem,7vw,6rem)/.92 'Fraunces', serif; }
+.teacher-hero h1 em { color: var(--gold); font-weight: 300; }
+.teacher-hero p { max-width: 38rem; color: var(--muted); font-size: 1.05rem; line-height: 1.65; }
+.teacher-qr { border: 1px solid color-mix(in srgb,var(--gold) 50%,var(--line)); border-radius: 18px; padding: 1.25rem; display: grid; justify-items: center; gap: .7rem; background: var(--panel); box-shadow: 0 28px 80px rgba(0,0,0,.28); }
+.teacher-qr > span { color: var(--gold); font: 600 .62rem 'JetBrains Mono', monospace; letter-spacing: .1em; text-transform: uppercase; }
+.teacher-qr img, .qr-placeholder { width: min(100%,290px); aspect-ratio: 1; border-radius: 10px; background: #f4f0e8; }
+.teacher-qr strong { color: var(--bone); font: 600 1.15rem 'JetBrains Mono', monospace; letter-spacing: .12em; }
+.teacher-qr small { color: var(--muted); }
+.teacher-links { width: min(1080px,100%); margin: auto; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 1rem; }
+.teacher-link-card { min-width: 0; border: 1px solid var(--line); border-radius: 14px; padding: 1.2rem; display: grid; gap: 1rem; background: var(--panel); }
+.teacher-link-card > div:first-child { display: flex; align-items: center; gap: .8rem; color: var(--gold); }
+.teacher-link-card > div:first-child span { display: grid; gap: .18rem; }
+.teacher-link-card > div:first-child strong { color: var(--bone); }
+.teacher-link-card > div:first-child small { color: var(--muted); }
+.teacher-link-card code { overflow: hidden; color: var(--muted); font: 500 .63rem 'JetBrains Mono', monospace; text-overflow: ellipsis; white-space: nowrap; }
+.teacher-link-actions { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
+.teacher-link-actions .button { min-height: 44px; justify-content: center; text-decoration: none; }
+.teacher-link-actions svg { width: 17px; }
+@media (max-width: 700px) { .teacher-hero, .teacher-links { grid-template-columns: 1fr; }.teacher-hero { margin-top: 3rem; }.teacher-qr { width: min(100%,340px); margin: auto; } }
+
 /* Percurso didático: o mesmo token permanece visível em todas as camadas. */
 .input-count { margin: .55rem .2rem 1.1rem; display: flex; justify-content: space-between; gap: 1rem; color: var(--muted); }
 .input-count small:first-child { color: var(--gold-soft); }

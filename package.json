@@ -14,8 +14,10 @@
     "@langchain/core": "1.2.9",
     "@langchain/openai": "1.5.11",
     "@supabase/supabase-js": "2.57.4",
+    "@types/qrcode": "^1.5.5",
     "gpt-tokenizer": "4.0.0",
     "lucide-react": "0.544.0",
+    "qrcode": "^1.5.4",
     "react": "19.1.1",
     "react-dom": "19.1.1",
     "three": "0.180.0"
